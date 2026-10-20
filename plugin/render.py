@@ -212,7 +212,13 @@ class RenderMixin(object):
         compute_s = round(time.time() - t0, 3)
         thumbnail_size = max(16, min(int(thumbnail_size or 256), 1024))
         outputs, warnings = [], []
-        for node, info in self._output_nodes(graph, output_ids):
+        nodes = self._output_nodes(graph, output_ids)
+        # The engine occasionally returns no texture for a freshly built graph
+        # (seen once in a 79-recipe regression run): recompute once before failing.
+        if compute and any(self._output_texture(n) is None for n, _ in nodes):
+            graph.compute()
+            compute_s = round(time.time() - t0, 3)
+        for node, info in nodes:
             tex = self._output_texture(node)
             if tex is None:
                 info["error"] = "no texture (output not connected or not computed)"

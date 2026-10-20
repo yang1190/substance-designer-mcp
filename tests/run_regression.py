@@ -13,7 +13,9 @@ What it checks
   2. recipes           every material recipe builds with 0 node / 0 connection
                        failures, and its height + baseColor outputs are not flat
   3. heightmaps        every heightmap style, same checks
-  4. library           every graph visible in SD's Library instantiates
+  4. library           every graph visible in SD's Library instantiates, then a
+                       few recipes are rebuilt (resolution must ignore Legacy
+                       packages the sweep pulled in)
   5. openpbr           OpenPBR identifiers / dual usages on a material recipe
   6. sdf_scene         build_sdf_scene renders a non-flat beauty pass
   7. splatter_sdf      Shape splatter v2 scatters an SDF shape (non-flat height)
@@ -264,6 +266,17 @@ def run(args):
                 rep.add("library", f["identifier"], False, f["error"])
             rep.add("library", "visible_graphs_instantiate", not fails,
                     "{} of {} failed".format(len(fails), total) if fails else "{} checked".format(total))
+
+            # The library sweep loads hidden Legacy packages as dependencies.
+            # Library resolution must still pick the current versions afterwards
+            # (regression: bare pkg:/// URLs once matched Legacy cells_1 -> 'Cells').
+            print("\n[after library sweep]")
+            for name in ("rock_granite", "metal_iron", "obsidian", "pro_concrete", "pro_granite"):
+                if name not in mats and not args.quick:
+                    continue
+                check_build(sd, rep, "after_library_sweep", name, lambda g, n=name: sd.call(
+                    "build_material_graph", graph_name=g, recipe_name=n, package_index=pkg,
+                    output_size_log2=args.resolution, open_in_editor=False), pkg, args.resolution)
 
         if not args.only:
             print("\n[sd16 features]")

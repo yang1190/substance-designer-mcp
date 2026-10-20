@@ -58,6 +58,8 @@ VERSION HISTORY
           SDF scenes, OpenPBR output identifiers/usages, folder-stored library graphs
   3.6.0 - render_outputs (stats + PNG thumbnails), export_outputs, validate_library,
           close_package; regression suite tests/run_regression.py
+  3.7.0 - Recipe fixes found by the regression suite: pro_* rocks, gem_*, carbon_fiber,
+          obsidian, fabric speed (~20x), rock_* tileable lumps
 """
 
 import sd
@@ -116,7 +118,7 @@ except SDError:  # pragma: no cover
 
 # ── Configuration ────────────────────────────────────────────────────────────
 DEFAULT_PORTS     = [9881]
-PLUGIN_VERSION    = (3, 6, 0)
+PLUGIN_VERSION    = (3, 7, 0)
 HEADER_SIZE       = 4
 COMMAND_TIMEOUT   = 120
 CLIENT_TIMEOUT    = 130
@@ -1228,8 +1230,12 @@ class CommandHandler(FunctionGraphMixin, RenderMixin):
         package to _release_temp_lib_package() after instancing."""
         pkg_mgr = self._pkg_mgr()
         loaded = list(pkg_mgr.getPackages())
-        # 1. exact URL (works when the dependency UID is valid in this session)
-        if ref and ref.startswith("pkg:///"):
+        # 1. exact package-relative URL ("pkg:///x?dependency=N") — only when a
+        #    dependency UID is given. A bare "pkg:///x" must NOT be matched this
+        #    way: any loaded package (e.g. a hidden Legacy copy pulled in as a
+        #    dependency of another library graph) would satisfy it, and Legacy
+        #    graphs have different port names (cells_1 -> 'Cells' vs 'output').
+        if ref and ref.startswith("pkg:///") and "?dependency=" in ref:
             for p in loaded:
                 try:
                     r = p.findResourceFromUrl(ref)

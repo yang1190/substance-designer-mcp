@@ -4,6 +4,29 @@ All notable changes to the Substance Designer MCP Plugin are documented here.
 
 ---
 
+## [1.4.0] — 2026-10-20 — Recipe fixes found by the regression suite
+
+### Plugin (v3.7.0) — recipes
+- **pro_granite / pro_limestone / pro_sandstone / pro_basalt / pro_slate**: `edge_detect` ran on the smooth macro shape, found almost no edges, and the whole flood-fill → warp → histogram chain collapsed to a near-black height (std ≤ 0.006). Islands now come from `cells_4` → `edge_detect` → `flood_fill` (per-island gradient + grayscale), mixed 50/50 with the macro shape, with crack lines multiplied in before the warps; histogram-scan contrast 0.6 → 0.3 to avoid clipping. Height std 0.19–0.20
+- **gem_***: final levels input range 0.3–0.9 did not match the warp output (≈0–0.45) and clipped everything to the 0.6 floor; now 0.02–0.45 → 0.2–1.0 (height std 0.004 → 0.12)
+- **carbon_fiber**: rebuilt on `weave_generator` (2×2 twill) + stretched-Perlin fiber streaks + warp/weft tint; the old cross-hatch was clipped to black by its levels node
+- **obsidian**: stronger shell relief, less final blur, full output range, normal intensity 10 (`_make_recipe(normal_intensity=...)`)
+- **fabric_***: fuzz noise `clouds_2` → `perlin_noise`. clouds_2 cost grows ~quadratically with scale (scale 72 = 32 s at 256 px on SD 16.0.5); fabric_silk 34.6 s → 0.9 s, velvet 24.7 s → 0.9 s, denim 17.2 s → 0.9 s
+- **rock_* (6 recipes)**: one centred `polygon_2` (Tiling 1) → randomized `tile_random` lumps (pyramid for 6-sided rocks, paraboloid otherwise); `gradient_linear_1` → tileable `clouds_2`, removing the dark band along the top/bottom edges
+
+### Plugin — tools
+- **Library resolution bug**: a bare `pkg:///x` URL was matched against *any* loaded package. Once a hidden Legacy copy was loaded as a dependency (e.g. after `validate_library`), `cells_1` resolved to Legacy `cells_1.sbs` (output `Cells` instead of `output`) and 22 recipes lost a connection. Exact URL matching is now only used for `?dependency=` URLs; bare identifiers always go through the version ranking
+- `render_outputs` recomputes once if an output has no texture after the first compute
+
+### Tests (runner)
+- New section `after_library_sweep`: rebuilds 5 recipes after the library sweep to catch state-dependent resolution bugs like the one above
+- Final full run on SD 16.0.5 with plugin 3.7.0: **99 pass, 0 known, 0 fail** (79 recipes, 8 heightmaps, 491 Library graphs, 5 post-sweep rebuilds, 4 SD 16 feature checks)
+
+### Tests
+- Full run after the fixes: 82 pass, 11 fixed, 0 fail. `obsidian` returned no texture once in that run (engine hiccup) and passes on re-run (normal std 0.011, height std 0.066); `render_outputs` now recomputes in that case. Baseline emptied
+
+---
+
 ## [1.3.0] — 2026-10-20 — Render/inspect tools and regression suite
 
 ### Plugin (v3.6.0)

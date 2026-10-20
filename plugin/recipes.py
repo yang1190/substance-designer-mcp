@@ -200,10 +200,15 @@ def _pbr_chain(height_alias, base_color_rgb=(0.5, 0.5, 0.5), roughness=0.7, meta
 
 
 def _make_recipe(nodes, connections, height_alias, color, roughness=0.7, metallic=0.0,
-                 description="", shadow_factor=0.55, highlight_factor=1.25):
+                 description="", shadow_factor=0.55, highlight_factor=1.25,
+                 normal_intensity=None):
     pbr_nodes, pbr_conns = _pbr_chain(
         height_alias, base_color_rgb=color, roughness=roughness, metallic=metallic,
         shadow_factor=shadow_factor, highlight_factor=highlight_factor)
+    if normal_intensity is not None:
+        for n in pbr_nodes:
+            if n.get("id_alias") == "pbr_normal":
+                n.setdefault("parameters", {})["intensity"] = normal_intensity
     return {
         "description": description,
         "nodes": nodes + pbr_nodes,
@@ -269,13 +274,22 @@ def _rock_base_recipe(name, description, cells_scale=3, perlin_scale=6, polygon_
                       warp_intensity=0.3, slope_samples=12, slope_intensity=0.31,
                       color=(0.38, 0.35, 0.32), roughness=0.85, metallic=0.0):
     nodes = [
-        {"id_alias": "rock_polygon", "resource_url": LIB["polygon_2"], "position": [-2000, 0],
-         "parameters": {"Tiling": {"value": 1, "type": "int"}, "Sides": {"value": polygon_sides, "type": "int"},
-                        "Scale": {"value": 1.0, "type": "float"}, "Rotation": {"value": 0.0, "type": "float"}, "Gradient": {"value": 1.0, "type": "float"}}},
+        # v3.7: randomized lumps (tile_random) instead of one centred polygon_2
+        # (Tiling 1 = a single blob; Tiling 3 = an obvious grid). polygon_sides
+        # picks the lump profile: 6 -> pyramid (crystalline), else paraboloid.
+        # The base ramp is a tileable clouds_2 instead of gradient_linear_1, whose
+        # wrap-around step produced a dark band along the top/bottom edges.
+        {"id_alias": "rock_polygon", "resource_url": LIB["tile_random"], "position": [-2000, 0],
+         "parameters": {"x_amount": {"value": 5, "type": "int"}, "y_amount": {"value": 5, "type": "int"},
+                        "pattern": {"value": 8 if polygon_sides >= 6 else 4, "type": "int"},
+                        "shape_scale": {"value": 1.1, "type": "float"}, "shape_scale_random": {"value": 0.45, "type": "float"},
+                        "shape_rotation_random": {"value": 1.0, "type": "float"}, "position_random": {"value": 0.6, "type": "float"},
+                        "pattern_color_random": {"value": 0.5, "type": "float"}, "size_random_x": {"value": 0.6, "type": "float"},
+                        "size_random_y": {"value": 0.6, "type": "float"}}},
         {"id_alias": "rock_polygon_levels", "definition_id": "sbs::compositing::levels", "position": [-1800, 0],
-         "parameters": {"levelinlow": [0.3, 0.3, 0.3, 0.3], "levelinhigh": [0.8, 0.8, 0.8, 0.8]}},
-        {"id_alias": "rock_gradient", "resource_url": LIB["gradient_linear_1"], "position": [-1800, -120],
-         "parameters": {"Tiling": {"value": 1, "type": "int"}, "rotation": {"value": 0, "type": "int"}}},
+         "parameters": {"levelinlow": [0.0, 0.0, 0.0, 0.0], "levelinhigh": [0.8, 0.8, 0.8, 0.8]}},
+        {"id_alias": "rock_gradient", "resource_url": LIB["clouds_2"], "position": [-1800, -120],
+         "parameters": {"scale": {"value": 2, "type": "int"}, "disorder": {"value": 0.3, "type": "float"}, "non_square_expansion": {"value": True, "type": "bool"}}},
         {"id_alias": "rock_base_blend", "definition_id": "sbs::compositing::blend", "position": [-1600, 0],
          "parameters": {"blendingmode": 0, "opacitymult": 0.5}},
         {"id_alias": "rock_cells", "resource_url": LIB["cells_1"], "position": [-1600, -180],
@@ -317,7 +331,7 @@ def _rock_base_recipe(name, description, cells_scale=3, perlin_scale=6, polygon_
     ]
     connections = [
         {"from": "rock_polygon", "to": "rock_polygon_levels", "from_output": "output", "to_input": "input1"},
-        {"from": "rock_gradient", "to": "rock_base_blend", "from_output": "Simple_Gradient", "to_input": "source"},
+        {"from": "rock_gradient", "to": "rock_base_blend", "from_output": "output", "to_input": "source"},
         {"from": "rock_polygon_levels", "to": "rock_base_blend", "from_output": "unique_filter_output", "to_input": "destination"},
         {"from": "rock_cells", "to": "rock_cells_blend", "from_output": "output", "to_input": "source"},
         {"from": "rock_base_blend", "to": "rock_cells_blend", "from_output": "unique_filter_output", "to_input": "destination"},
@@ -509,9 +523,11 @@ def _gem_recipe(description, color, roughness=0.05, metallic=0.0):
          "parameters": {"Intensity": {"value": 1.0, "type": "float"}, "Quality": {"value": 0, "type": "int"}}},
         {"id_alias": "gem_warp", "definition_id": "sbs::compositing::warp", "position": [-400, 0],
          "parameters": {"intensity": 0.08}},
+        # v3.7: input range matched to gem_warp (~0..0.45); the old 0.3..0.9 range clipped
+        # almost every pixel to the 0.6 floor and produced a flat height.
         {"id_alias": "gem_final", "definition_id": "sbs::compositing::levels", "position": [-200, 0],
-         "parameters": {"levelinlow": [0.3, 0.3, 0.3, 0.3], "levelinhigh": [0.9, 0.9, 0.9, 0.9],
-                        "leveloutlow": [0.6, 0.6, 0.6, 0.6], "levelouthigh": [1.0, 1.0, 1.0, 1.0]}},
+         "parameters": {"levelinlow": [0.02, 0.02, 0.02, 0.02], "levelinhigh": [0.45, 0.45, 0.45, 0.45],
+                        "leveloutlow": [0.2, 0.2, 0.2, 0.2], "levelouthigh": [1.0, 1.0, 1.0, 1.0]}},
     ]
     connections = [
         {"from": "gem_polygon", "to": "gem_blend", "from_output": "output", "to_input": "source"},
@@ -950,8 +966,10 @@ def _fabric_recipe(description, color=(0.35, 0.25, 0.55), roughness=0.82, metall
          "parameters": {"scale": {"value": 4, "type": "int"}, "disorder": {"value": weave_disorder * 0.5, "type": "float"}, "non_square_expansion": {"value": True, "type": "bool"}}},
         {"id_alias": "fb_dir_warp",   "definition_id": "sbs::compositing::directionalwarp", "position": [-600, 0],
          "parameters": {"intensity": 0.10}},
-        # Fiber texture — clouds at fine scale for fabric fuzz
-        {"id_alias": "fb_clouds_fuzz","resource_url": LIB["clouds_2"],     "position": [-400, 300],
+        # Fiber texture — fine noise for fabric fuzz.
+        # v3.7: perlin instead of clouds_2: clouds_2 cost grows ~quadratically with
+        # scale (scale 72 = 32 s at 256 px on SD 16.0.5), perlin is ~1 s at any scale.
+        {"id_alias": "fb_clouds_fuzz","resource_url": LIB["perlin_noise"],  "position": [-400, 300],
          "parameters": {"scale": {"value": thread_scale * 3, "type": "int"}, "disorder": {"value": weave_disorder * 0.8, "type": "float"}, "non_square_expansion": {"value": True, "type": "bool"}}},
         {"id_alias": "fb_blend_fuzz", "definition_id": "sbs::compositing::blend", "position": [-400, 0],
          "parameters": {"blendingmode": 1, "opacitymult": 0.10}},
@@ -1043,7 +1061,7 @@ def _obsidian_recipe(description, color=(0.05, 0.04, 0.06), roughness=0.05, meta
         {"id_alias": "ob_blur_shell", "resource_url": LIB["blur_hq_grayscale"], "position": [-1000, 200],
          "parameters": {"Intensity": {"value": 8.0, "type": "float"}, "Quality": {"value": 0, "type": "int"}}},
         {"id_alias": "ob_blend1",     "definition_id": "sbs::compositing::blend", "position": [-800, 0],
-         "parameters": {"blendingmode": 3, "opacitymult": 0.25}},
+         "parameters": {"blendingmode": 3, "opacitymult": 0.6}},
         # Warp 1 — fracture flow
         {"id_alias": "ob_perlin_w1",  "resource_url": LIB["perlin_noise"],  "position": [-800, 300],
          "parameters": {"scale": {"value": 8, "type": "int"}, "disorder": {"value": 0.15, "type": "float"}, "non_square_expansion": {"value": True, "type": "bool"}}},
@@ -1053,10 +1071,10 @@ def _obsidian_recipe(description, color=(0.05, 0.04, 0.06), roughness=0.05, meta
          "parameters": {"intensity": 0.18}},
         # Smooth out — heavy blur for glass-like surface
         {"id_alias": "ob_blur_final", "resource_url": LIB["blur_hq_grayscale"], "position": [-400, 0],
-         "parameters": {"Intensity": {"value": 3.0, "type": "float"}, "Quality": {"value": 0, "type": "int"}}},
+         "parameters": {"Intensity": {"value": 1.0, "type": "float"}, "Quality": {"value": 0, "type": "int"}}},
         {"id_alias": "ob_final",      "definition_id": "sbs::compositing::levels", "position": [-200, 0],
          "parameters": {"levelinlow": [0.35, 0.35, 0.35, 0.35], "levelinhigh": [0.95, 0.95, 0.95, 0.95],
-                        "leveloutlow": [0.4, 0.4, 0.4, 0.4], "levelouthigh": [1.0, 1.0, 1.0, 1.0]}},
+                        "leveloutlow": [0.0, 0.0, 0.0, 0.0], "levelouthigh": [1.0, 1.0, 1.0, 1.0]}},
     ]
     connections = [
         {"from": "ob_crystal",    "to": "ob_lvl1",      "from_output": "output",              "to_input": "input1"},
@@ -1070,7 +1088,8 @@ def _obsidian_recipe(description, color=(0.05, 0.04, 0.06), roughness=0.05, meta
         {"from": "ob_blur_final", "to": "ob_final",     "from_output": "Blur_HQ",             "to_input": "input1"},
     ]
     return _make_recipe(nodes, connections, "ob_final", color, roughness=roughness, metallic=metallic,
-                        description=description, shadow_factor=0.20, highlight_factor=2.0)
+                        description=description, shadow_factor=0.20, highlight_factor=2.0,
+                        normal_intensity=10.0)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1078,49 +1097,35 @@ def _obsidian_recipe(description, color=(0.05, 0.04, 0.06), roughness=0.05, meta
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _carbon_fiber_recipe(description, color=(0.08, 0.08, 0.09), roughness=0.20, metallic=0.0):
-    """Carbon fiber: tight anisotropic weave → directional warp → specular variation.
-    Extremely tight thread scale with high anisotropy via transformation stretching.
+    """Carbon fiber: 2x2 twill weave (weave_generator) + fine fiber streaks +
+    warp/weft tint so neighbouring tows read differently, like real CF.
+    v3.7: rebuilt — the old stretched-Perlin cross-hatch was clipped to black
+    by its levels node and produced a flat material.
     """
     nodes = [
-        # Primary fiber direction (0°)
-        {"id_alias": "cf_perlin_0",   "resource_url": LIB["perlin_noise"],  "position": [-1400, 0],
+        {"id_alias": "cf_weave",      "resource_url": "pkg:///weave_generator", "position": [-1200, 0],
+         "parameters": {"tile_x": {"value": 12, "type": "int"}, "tile_y": {"value": 12, "type": "int"},
+                        "weave": {"value": 2, "type": "int"}, "shape": {"value": 0.85, "type": "float"}}},
+        # Fine fiber streaks along the tows
+        {"id_alias": "cf_perlin_0",   "resource_url": LIB["perlin_noise"],  "position": [-1200, 250],
          "parameters": {"scale": {"value": 32, "type": "int"}, "disorder": {"value": 0.05, "type": "float"}, "non_square_expansion": {"value": True, "type": "bool"}}},
-        {"id_alias": "cf_stretch_0",  "definition_id": "sbs::compositing::transformation", "position": [-1200, 0],
+        {"id_alias": "cf_stretch_0",  "definition_id": "sbs::compositing::transformation", "position": [-1000, 250],
          "parameters": {"matrix22": [12.0, 0.0, 0.0, 0.1]}},
-        # Secondary fiber direction (90°)
-        {"id_alias": "cf_perlin_90",  "resource_url": LIB["perlin_noise"],  "position": [-1400, 200],
-         "parameters": {"scale": {"value": 32, "type": "int"}, "disorder": {"value": 0.05, "type": "float"}, "non_square_expansion": {"value": True, "type": "bool"}}},
-        {"id_alias": "cf_stretch_90", "definition_id": "sbs::compositing::transformation", "position": [-1200, 200],
-         "parameters": {"matrix22": [0.1, 0.0, 0.0, 12.0]}},
-        # Weave cross-hatch blend
-        {"id_alias": "cf_blend_weave","definition_id": "sbs::compositing::blend", "position": [-1000, 0],
-         "parameters": {"blendingmode": 3, "opacitymult": 0.7}},
-        {"id_alias": "cf_lvl_weave",  "definition_id": "sbs::compositing::levels", "position": [-800, 0],
-         "parameters": {"levelinlow": [0.4, 0.4, 0.4, 0.4], "levelinhigh": [0.7, 0.7, 0.7, 0.7]}},
-        # Tow bundle variation — cells at low scale
-        {"id_alias": "cf_cells_tow",  "resource_url": LIB["cells_1"],      "position": [-800, 250],
-         "parameters": {"scale": {"value": 8, "type": "int"}, "disorder": {"value": 0.15, "type": "float"}, "non_square_expansion": {"value": True, "type": "bool"}}},
-        {"id_alias": "cf_blend_tow",  "definition_id": "sbs::compositing::blend", "position": [-600, 0],
-         "parameters": {"blendingmode": 1, "opacitymult": 0.12}},
-        # Directional warp for slight fiber undulation
-        {"id_alias": "cf_perlin_dul", "resource_url": LIB["perlin_noise"],  "position": [-400, 250],
-         "parameters": {"scale": {"value": 16, "type": "int"}, "disorder": {"value": 0.08, "type": "float"}, "non_square_expansion": {"value": True, "type": "bool"}}},
-        {"id_alias": "cf_dir_warp",   "definition_id": "sbs::compositing::directionalwarp", "position": [-400, 0],
-         "parameters": {"intensity": 0.04}},
+        {"id_alias": "cf_blend_fib",  "definition_id": "sbs::compositing::blend", "position": [-800, 0],
+         "parameters": {"blendingmode": 3, "opacitymult": 0.15}},
+        # Warp vs weft tows: slight brightness difference (the CF "checker" read)
+        {"id_alias": "cf_tint",       "definition_id": "sbs::compositing::blend", "position": [-600, 0],
+         "parameters": {"blendingmode": 3, "opacitymult": 0.2}},
         {"id_alias": "cf_final",      "definition_id": "sbs::compositing::levels", "position": [-200, 0],
-         "parameters": {"levelinlow": [0.1, 0.1, 0.1, 0.1], "levelinhigh": [0.9, 0.9, 0.9, 0.9]}},
+         "parameters": {"levelinlow": [0.05, 0.05, 0.05, 0.05], "levelinhigh": [1.0, 1.0, 1.0, 1.0]}},
     ]
     connections = [
         {"from": "cf_perlin_0",   "to": "cf_stretch_0",  "from_output": "output",              "to_input": "input1"},
-        {"from": "cf_perlin_90",  "to": "cf_stretch_90", "from_output": "output",              "to_input": "input1"},
-        {"from": "cf_stretch_0",  "to": "cf_blend_weave","from_output": "unique_filter_output","to_input": "source"},
-        {"from": "cf_stretch_90", "to": "cf_blend_weave","from_output": "unique_filter_output","to_input": "destination"},
-        {"from": "cf_blend_weave","to": "cf_lvl_weave",  "from_output": "unique_filter_output","to_input": "input1"},
-        {"from": "cf_cells_tow",  "to": "cf_blend_tow",  "from_output": "output",              "to_input": "source"},
-        {"from": "cf_lvl_weave",  "to": "cf_blend_tow",  "from_output": "unique_filter_output","to_input": "destination"},
-        {"from": "cf_perlin_dul", "to": "cf_dir_warp",   "from_output": "output",              "to_input": "inputintensity"},
-        {"from": "cf_blend_tow",  "to": "cf_dir_warp",   "from_output": "unique_filter_output","to_input": "input1"},
-        {"from": "cf_dir_warp",   "to": "cf_final",      "from_output": "unique_filter_output","to_input": "input1"},
+        {"from": "cf_stretch_0",  "to": "cf_blend_fib",  "from_output": "unique_filter_output","to_input": "source"},
+        {"from": "cf_weave",      "to": "cf_blend_fib",  "from_output": "Height",              "to_input": "destination"},
+        {"from": "cf_weave",      "to": "cf_tint",       "from_output": "Mask_1",              "to_input": "source"},
+        {"from": "cf_blend_fib",  "to": "cf_tint",       "from_output": "unique_filter_output","to_input": "destination"},
+        {"from": "cf_tint",       "to": "cf_final",      "from_output": "unique_filter_output","to_input": "input1"},
     ]
     return _make_recipe(nodes, connections, "cf_final", color, roughness=roughness, metallic=metallic,
                         description=description, shadow_factor=0.30, highlight_factor=1.80)
@@ -1372,9 +1377,13 @@ def _pro_rock_recipe(description, color=(0.50, 0.45, 0.40), roughness=0.88, meta
          "parameters": {"Samples": {"value": 8, "type": "int"}, "Intensity": {"value": 0.2, "type": "float"}, "mode": {"value": 0, "type": "int"}}},
         {"id_alias": "pr_lvl1",         "definition_id": "sbs::compositing::levels", "position": [-2000, 0],
          "parameters": {"levelinlow": [0.15, 0.15, 0.15, 0.15], "levelinhigh": [0.9, 0.9, 0.9, 0.9]}},
-        # ── Stage 2: Edge detect → flood fill → per-island gradient
+        # ── Stage 2: island mask → edge detect → flood fill → per-island gradient
+        # v3.7: edge_detect needs flat-colored regions (cells_4); on the smooth
+        # macro shape it found almost no edges and the whole chain collapsed.
+        {"id_alias": "pr_cells_isl",    "resource_url": LIB["cells_4"], "position": [-2000, 250],
+         "parameters": {"scale": {"value": mid_scale, "type": "int"}, "disorder": {"value": disorder * 0.5, "type": "float"}, "non_square_expansion": {"value": True, "type": "bool"}}},
         {"id_alias": "pr_edge1",        "resource_url": LIB["edge_detect"], "position": [-1800, 0],
-         "parameters": {"edge_width": {"value": 2.0, "type": "float"}, "edge_roundness": {"value": 0.5, "type": "float"}, "tolerance": {"value": 0.3, "type": "float"}}},
+         "parameters": {"edge_width": {"value": 2.0, "type": "float"}, "edge_roundness": {"value": 0.0, "type": "float"}, "tolerance": {"value": 0.05, "type": "float"}}},
         {"id_alias": "pr_flood1",       "resource_url": LIB["flood_fill"], "position": [-1600, 0]},
         {"id_alias": "pr_ff_grad",      "resource_url": LIB["flood_fill_to_gradient_2"], "position": [-1400, 0],
          "parameters": {"angle": {"value": 0.0, "type": "float"}, "angle_variation": {"value": 1.0, "type": "float"}}},
@@ -1382,8 +1391,12 @@ def _pro_rock_recipe(description, color=(0.50, 0.45, 0.40), roughness=0.88, meta
          "parameters": {"luminance_random": {"value": 0.5, "type": "float"}}},
         {"id_alias": "pr_blend_ff",     "definition_id": "sbs::compositing::blend", "position": [-1200, 0],
          "parameters": {"blendingmode": 3, "opacitymult": 0.35}},
+        {"id_alias": "pr_mix",          "definition_id": "sbs::compositing::blend", "position": [-1100, 0],
+         "parameters": {"blendingmode": 0, "opacitymult": 0.5}},
         {"id_alias": "pr_lvl2",         "definition_id": "sbs::compositing::levels", "position": [-1000, 0],
          "parameters": {"levelinlow": [0.1, 0.1, 0.1, 0.1], "levelinhigh": [0.95, 0.95, 0.95, 0.95]}},
+        {"id_alias": "pr_crack",        "definition_id": "sbs::compositing::blend", "position": [-900, 0],
+         "parameters": {"blendingmode": 3, "opacitymult": 0.4}},
         # ── Stage 3: Multi-directional warp (clouds as intensity input)
         {"id_alias": "pr_clouds_warp1", "resource_url": LIB["clouds_2"], "position": [-1000, 250],
          "parameters": {"scale": {"value": mid_scale * 2, "type": "int"}, "disorder": {"value": disorder * 0.6, "type": "float"}, "non_square_expansion": {"value": True, "type": "bool"}}},
@@ -1421,7 +1434,7 @@ def _pro_rock_recipe(description, color=(0.50, 0.45, 0.40), roughness=0.88, meta
          "parameters": {"blendingmode": 1, "opacitymult": 0.10}},
         # ── Stage 6: Histogram scan + final levels
         {"id_alias": "pr_hist_scan",    "resource_url": LIB["histogram_scan"], "position": [600, 0],
-         "parameters": {"Position": {"value": 0.5, "type": "float"}, "Contrast": {"value": 0.6, "type": "float"}}},
+         "parameters": {"Position": {"value": 0.5, "type": "float"}, "Contrast": {"value": 0.3, "type": "float"}}},
         {"id_alias": "pr_final",        "definition_id": "sbs::compositing::levels", "position": [800, 0],
          "parameters": {"levelinlow": [0.05, 0.05, 0.05, 0.05], "levelinhigh": [0.95, 0.95, 0.95, 0.95]}},
     ]
@@ -1434,15 +1447,19 @@ def _pro_rock_recipe(description, color=(0.50, 0.45, 0.40), roughness=0.88, meta
         {"from": "pr_clouds_mid",   "to": "pr_slope2",       "from_output": "output",       "to_input": "Effect"},
         {"from": "pr_slope2",       "to": "pr_lvl1",         "from_output": "Slope_Blur",   "to_input": "input1"},
         # Stage 2: edge → flood fill → per-island gradients
-        {"from": "pr_lvl1",         "to": "pr_edge1",        "from_output": "unique_filter_output", "to_input": "input"},
+        {"from": "pr_cells_isl",    "to": "pr_edge1",        "from_output": "output",       "to_input": "input"},
         {"from": "pr_edge1",        "to": "pr_flood1",       "from_output": "output",       "to_input": "mask"},
         {"from": "pr_flood1",       "to": "pr_ff_grad",      "from_output": "output",       "to_input": "input"},
         {"from": "pr_flood1",       "to": "pr_ff_gray",      "from_output": "output",       "to_input": "input"},
         {"from": "pr_ff_grad",      "to": "pr_blend_ff",     "from_output": "output",       "to_input": "source"},
         {"from": "pr_ff_gray",      "to": "pr_blend_ff",     "from_output": "output",       "to_input": "destination"},
-        {"from": "pr_blend_ff",     "to": "pr_lvl2",         "from_output": "unique_filter_output", "to_input": "input1"},
+        {"from": "pr_blend_ff",     "to": "pr_mix",          "from_output": "unique_filter_output", "to_input": "source"},
+        {"from": "pr_lvl1",         "to": "pr_mix",          "from_output": "unique_filter_output", "to_input": "destination"},
+        {"from": "pr_mix",          "to": "pr_lvl2",         "from_output": "unique_filter_output", "to_input": "input1"},
+        {"from": "pr_edge1",        "to": "pr_crack",        "from_output": "output",       "to_input": "source"},
+        {"from": "pr_lvl2",         "to": "pr_crack",        "from_output": "unique_filter_output", "to_input": "destination"},
         # Stage 3: multi-directional warp with clouds intensity
-        {"from": "pr_lvl2",         "to": "pr_multi_warp1",  "from_output": "unique_filter_output", "to_input": "input"},
+        {"from": "pr_crack",        "to": "pr_multi_warp1",  "from_output": "unique_filter_output", "to_input": "input"},
         {"from": "pr_clouds_warp1", "to": "pr_multi_warp1",  "from_output": "output",       "to_input": "intensity_input"},
         {"from": "pr_multi_warp1",  "to": "pr_multi_warp2",  "from_output": "output",       "to_input": "input"},
         {"from": "pr_clouds_warp2", "to": "pr_multi_warp2",  "from_output": "output",       "to_input": "intensity_input"},

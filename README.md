@@ -308,7 +308,7 @@ python tests/run_regression.py           # full suite (~15 min on SD 16.0.5)
 
 Known problems live in `tests/regression_baseline.json`: they are reported as **KNOWN** and do not fail the run; a listed problem that passes is reported as **FIXED** (remove it from the baseline). Any other failure is **FAIL** and the script exits with code 1. Reports (Markdown + JSON with all statistics) are written to `tests/reports/`.
 
-Current baseline on SD 16.0.5: 12 recipes with flat / low-contrast outputs (`pro_granite`, `pro_limestone`, `pro_sandstone`, `pro_basalt`, `pro_slate`, the 5 `gem_*`, `carbon_fiber`, `obsidian` normal) and 3 slow fabric recipes (`fabric_denim`, `fabric_silk`, `fabric_velvet`, 17–35 s at 256 px).
+The first run on SD 16.0.5 found 12 recipes with flat / low-contrast outputs and 3 slow fabric recipes; all were fixed in plugin 3.7.0 and the baseline is now empty (latest full run: 99 pass, 0 known, 0 fail).
 
 ---
 
