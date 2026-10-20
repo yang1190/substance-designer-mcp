@@ -4,6 +4,27 @@ All notable changes to the Substance Designer MCP Plugin are documented here.
 
 ---
 
+## [1.3.0] — 2026-10-20 — Render/inspect tools and regression suite
+
+### Plugin (v3.6.0)
+- New module `plugin/render.py`
+- `render_outputs`: computes a graph and returns, per output node, identifier, usages, size, pixel format, per-channel min/max/mean/std with `flat` / `low_contrast` flags, and a PNG thumbnail (base64). Reads the texture buffer directly (8/16-bit, 16F, 32F; LUM and RGBA verified on 16.0.5); grayscale thumbnails normalized to their own range
+- `export_outputs`: compute and save output textures (png/tga/exr/tif/jpg) with a name pattern
+- `validate_library`: batched instantiation of every visible Library graph in a throw-away package
+- `close_package`: unload a package (refuses saved packages with unsaved changes unless `force`)
+- `create_package` now returns `package_index`
+- Knowledge base: workflow rule "verify with render_outputs"
+
+### Bridge Server (v2.2.0)
+- `render_outputs` returns the thumbnails as MCP image content (the AI client sees the images) plus the JSON statistics
+- Tools `export_outputs`, `validate_library`, `close_package` (40 tools)
+
+### Tests
+- `tests/run_regression.py` (stdlib only): recipes, heightmaps, performance, library, SD 16 features; KNOWN/FIXED/FAIL against `tests/regression_baseline.json`; Markdown + JSON reports in `tests/reports/`
+- First full run on SD 16.0.5: 79 recipes, 8 heightmaps, 491 Library graphs, 4 SD 16 feature checks. Baseline: 12 recipes with flat / low-contrast outputs, 3 slow fabric recipes
+
+---
+
 ## [1.2.0] — 2026-10-20 — Function graphs, SDF, OpenPBR outputs (SD 16)
 
 ### Plugin (v3.5.0)

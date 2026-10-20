@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-sd_mcp_bridge.py - Substance Designer MCP Bridge v2.1.0
+sd_mcp_bridge.py - Substance Designer MCP Bridge v2.2.0
 
 Relay between Claude (stdio/FastMCP) and the SD plugin (TCP).
 
@@ -41,7 +41,8 @@ venv_site = os.path.join(script_dir, '.venv', 'Lib', 'site-packages')
 if os.path.exists(venv_site):
     sys.path.insert(0, venv_site)
 
-from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.fastmcp import FastMCP, Context, Image
+import base64
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -196,7 +197,7 @@ async def _async_send(cmd_type: str, params: dict = None) -> str:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def _lifespan(app: FastMCP):
-    logger.info(f"Substance Designer MCP Bridge v2.1.0 -> SD plugin on port {_sd_port}")
+    logger.info(f"Substance Designer MCP Bridge v2.2.0 -> SD plugin on port {_sd_port}")
     logger.info("Ensure Substance Designer is running with the MCP plugin loaded.")
     yield {}
     logger.info("Substance Designer MCP bridge shutting down.")
@@ -1069,6 +1070,89 @@ async def set_shape_splatter_sdf(ctx: Context,
 
 
 @mcp.tool()
+async def render_outputs(ctx: Context,
+                         graph_identifier: Optional[str] = None,
+                         output_ids: Optional[List[str]] = None,
+                         thumbnails: bool = True,
+                         thumbnail_size: int = 256,
+                         normalize_grayscale: bool = True) -> list:
+    """
+    Compute a graph and LOOK at the result: returns per-output statistics and
+    PNG thumbnails (as images) of every output node.
+
+    Use it after building or editing a graph to verify the material:
+      - stats per channel: min / max / mean / std; 'flat' = uniform output,
+        'low_contrast' = barely any variation (both usually mean a broken chain)
+      - identifier, usages, size, pixel format, compute time
+    output_ids: optional filter (identifier, label, node id or usage)
+    thumbnail_size: max side in px (16-1024). Grayscale thumbnails are
+    normalized to their own range by default (stats are not).
+    """
+    raw = await _async_send("render_outputs", {
+        "graph_identifier": graph_identifier, "output_ids": output_ids,
+        "thumbnails": thumbnails, "thumbnail_size": thumbnail_size,
+        "normalize_grayscale": normalize_grayscale})
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return [raw]  # error text from the plugin
+    images = []
+    for o in data.get("outputs", []):
+        b64 = o.pop("thumbnail_png_base64", None)
+        if b64:
+            images.append((o.get("identifier") or o.get("node_id"), b64))
+    content = [json.dumps(data, indent=2)]
+    for name, b64 in images:
+        content.append("Output '{}':".format(name))
+        content.append(Image(data=base64.b64decode(b64), format="png"))
+    return content
+
+
+@mcp.tool()
+async def export_outputs(ctx: Context,
+                         directory: str,
+                         graph_identifier: Optional[str] = None,
+                         output_ids: Optional[List[str]] = None,
+                         file_format: str = "png",
+                         name_pattern: str = "{graph}_{identifier}") -> str:
+    """
+    Compute a graph and save its output textures to disk (on the machine
+    running Substance Designer).
+    - directory: target folder (created if missing)
+    - file_format: png, tga, exr, tif, jpg, bmp
+    - name_pattern: keys {graph} {identifier} {label} {node_id} {usage}
+    """
+    return await _async_send("export_outputs", {
+        "directory": directory, "graph_identifier": graph_identifier,
+        "output_ids": output_ids, "file_format": file_format,
+        "name_pattern": name_pattern})
+
+
+@mcp.tool()
+async def validate_library(ctx: Context, offset: int = 0, limit: int = 150,
+                           filter_text: str = "") -> str:
+    """
+    Health check after an SD update: instantiate the graphs visible in SD's
+    Library (batch with offset/limit; continue with next_offset until null)
+    in a throw-away package and report the ones that fail.
+    """
+    return await _async_send("validate_library", {
+        "offset": offset, "limit": limit, "filter_text": filter_text})
+
+
+@mcp.tool()
+async def close_package(ctx: Context, package_index: Optional[int] = None,
+                        package_path: Optional[str] = None,
+                        force: bool = False) -> str:
+    """
+    Close (unload) a package. A saved package with unsaved changes is refused
+    unless force=True. New unsaved packages close directly.
+    """
+    return await _async_send("close_package", {
+        "package_index": package_index, "package_path": package_path, "force": force})
+
+
+@mcp.tool()
 async def list_material_models(ctx: Context) -> str:
     """
     SD 16+: list the material models a graph can use (OpenPBR v1.1, Adobe
@@ -1084,13 +1168,13 @@ async def list_material_models(ctx: Context) -> str:
 def main():
     global _sd_port
 
-    parser = argparse.ArgumentParser(description="Substance Designer MCP Bridge v2.1.0")
+    parser = argparse.ArgumentParser(description="Substance Designer MCP Bridge v2.2.0")
     parser.add_argument("--port", type=int, default=9881,  # BUG-B03 fix: default is 9881
                         help="TCP port to connect to the SD plugin (default: 9881)")
     args = parser.parse_args()
     _sd_port = args.port
 
-    logger.info(f"SD MCP Bridge v2.1.0 -> SD plugin on port {_sd_port}")
+    logger.info(f"SD MCP Bridge v2.2.0 -> SD plugin on port {_sd_port}")
     mcp.run()
 
 

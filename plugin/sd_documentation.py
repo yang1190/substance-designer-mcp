@@ -1338,8 +1338,9 @@ WORKFLOW = {
     "sd_mcp_rules": [
         "ONE CALL AT A TIME — never parallel SD tool calls, always wait for each response",
         "STEP ORDER: get_scene_info → create_graph → create_node(s) → get_node_info (lib nodes) → connect_nodes → get_graph_info → open_graph",
+        "ALWAYS VERIFY: after building or editing a graph call render_outputs and look at the thumbnails/stats — 'flat' or 'low_contrast' outputs mean a broken chain",
         "newNode(unknown_def) HANGS SD 15 permanently — always validate first",
-        "SDUsage.sNew() HANGS SD 15 — removed from plugin, never re-add",
+        "SDUsage.sNew() HANGS SD 15 — the plugin only uses it on SD 16+ (verified on 16.0.5)",
         "arrange_nodes() DESTROYS ALL connections — never use, use move_node() instead",
         "Library node output IDs ≠ 'unique_filter_output' — always get_node_info first",
         "directionalwarp warp map port = 'inputintensity' (NOT 'inputgradient')",

@@ -1,0 +1,25 @@
+{
+  "_comment": "Known problems on SD 16.0.5 (first full run 2026-10-20). A failing check listed here is reported as KNOWN; when it passes it is reported as FIXED - remove it from this file then.",
+  "generated_from": "tests/reports/regression_20261020_151913.json",
+  "known_issues": {
+    "recipes": {
+      "pro_granite": "edge_detect on a smooth clouds input finds almost no edges; flood-fill chain collapses (base color/roughness flat, height low contrast)",
+      "pro_limestone": "same pro_* edge_detect/flood-fill collapse: all outputs flat",
+      "pro_sandstone": "same pro_* collapse: roughness flat, height low contrast",
+      "pro_basalt": "same pro_* collapse: all outputs uniform",
+      "pro_slate": "same pro_* collapse: base color/roughness flat, height low contrast",
+      "gem_diamond": "gem recipe: height/normal/roughness/base color nearly uniform",
+      "gem_ruby": "gem recipe: height/normal/roughness/base color nearly uniform",
+      "gem_sapphire": "gem recipe: height/normal/roughness/base color nearly uniform",
+      "gem_emerald": "gem recipe: height/normal/roughness/base color nearly uniform",
+      "gem_amethyst": "gem recipe: height/normal/roughness/base color nearly uniform",
+      "carbon_fiber": "weave barely visible: base color/roughness/normal flat, height low contrast",
+      "obsidian": "normal map flat (std 0.0026) - smooth glass, possibly by design"
+    },
+    "performance": {
+      "fabric_denim": "~17 s at 256 px (SD 16.0.5)",
+      "fabric_silk": "~35 s at 256 px (SD 16.0.5)",
+      "fabric_velvet": "~25 s at 256 px (SD 16.0.5)"
+    }
+  }
+}

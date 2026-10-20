@@ -56,6 +56,8 @@ VERSION HISTORY
           (non-legacy versions), output usages + OpenPBR material model, list_material_models
   3.5.0 - Function graphs on parameters (pixel processor, 3D viewer, Shape splatter v2),
           SDF scenes, OpenPBR output identifiers/usages, folder-stored library graphs
+  3.6.0 - render_outputs (stats + PNG thumbnails), export_outputs, validate_library,
+          close_package; regression suite tests/run_regression.py
 """
 
 import sd
@@ -103,6 +105,7 @@ from sd.api.sdvaluefloat4  import SDValueFloat4
 from sd.api.sdvaluecolorrgba import SDValueColorRGBA
 from sd.api.sbs.sdsbscompgraph import SDSBSCompGraph
 from .function_graphs import FunctionGraphMixin
+from .render import RenderMixin
 try:  # output usages (baseColor, normal, ...) — confirmed working on SD 16.0.5
     from sd.api.sdusage      import SDUsage
     from sd.api.sdvalueusage import SDValueUsage
@@ -113,7 +116,7 @@ except SDError:  # pragma: no cover
 
 # ── Configuration ────────────────────────────────────────────────────────────
 DEFAULT_PORTS     = [9881]
-PLUGIN_VERSION    = (3, 5, 0)
+PLUGIN_VERSION    = (3, 6, 0)
 HEADER_SIZE       = 4
 COMMAND_TIMEOUT   = 120
 CLIENT_TIMEOUT    = 130
@@ -758,7 +761,7 @@ def _sanitize_identifier(name):
 # ════════════════════════════════════════════════════════════════════════════
 # COMMAND HANDLER — the brain of the plugin
 # ════════════════════════════════════════════════════════════════════════════
-class CommandHandler(FunctionGraphMixin):
+class CommandHandler(FunctionGraphMixin, RenderMixin):
 
     def __init__(self):
         self.HANDLERS = {
@@ -810,6 +813,11 @@ class CommandHandler(FunctionGraphMixin):
             "get_function_graph_info": self.get_function_graph_info,
             "build_sdf_scene":         self.build_sdf_scene,
             "set_shape_splatter_sdf":  self.set_shape_splatter_sdf,
+            # ── Render / inspect / export ──
+            "render_outputs":          self.render_outputs,
+            "export_outputs":          self.export_outputs,
+            "validate_library":        self.validate_library,
+            "close_package":           self.close_package,
         }
         # Library node URL cache (populated lazily, session-lifetime)
         self._lib_url_cache = {}  # lower-case keyword -> exact library identifier
@@ -1457,7 +1465,12 @@ class CommandHandler(FunctionGraphMixin):
 
     def create_package(self, file_path=None):
         pkg = self._pkg_mgr().newUserPackage()
+        pkgs = list(self._pkg_mgr().getUserPackages())
+        idx = next((i for i, p in enumerate(pkgs)
+                    if p.getUID() == pkg.getUID()), len(pkgs) - 1) if hasattr(pkg, "getUID") \
+            else len(pkgs) - 1
         return {
+            "package_index": idx,
             "file_path": pkg.getFilePath(),
             "message": "New package created. Use save_package to save it.",
         }

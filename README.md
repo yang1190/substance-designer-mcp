@@ -18,7 +18,7 @@ Control Substance Designer from any MCP-compatible AI client (Claude Code, Claud
 
 - **Natural language → SD graph**: "Create a cracked concrete material" → 44-node PBR graph with height, normal, roughness, AO, baseColor, metallic outputs
 - **79 built-in material recipes**: pro-grade materials using the same node architecture as professional SD artists
-- **36 MCP tools**: get scene info, create/delete graphs, create nodes, connect nodes, set parameters, build full materials in one call, function graphs and SDF scenes (SD 16)
+- **40 MCP tools**: get scene info, create/delete graphs, create nodes, connect nodes, set parameters, build full materials in one call, function graphs and SDF scenes (SD 16)
 - **Library node support**: Clouds, Cells, Perlin Noise, Polygon, Edge Detect, Flood Fill, Multi-Directional Warp, etc.
 - **Thread-safe**: All SD API calls dispatched to Qt main thread via Signal/Slot queued connection
 
@@ -187,6 +187,10 @@ List all available material recipes
 | `list_sdf_functions` | SD 16+: the 52 SDF primitives / operators / transforms / materials with ports |
 | **`build_sdf_scene`** | **SD 16+: build an SDF scene and render it with 3D viewer node(s) (beauty, depth, normals, material ID...)** |
 | **`set_shape_splatter_sdf`** | **SD 16+: scatter a custom SDF shape with Shape splatter v2** |
+| **`render_outputs`** | **Compute a graph and return per-output stats + PNG thumbnails (images) so the AI can check its result** |
+| `export_outputs` | Compute and save output textures (png / tga / exr / tif / jpg) |
+| `validate_library` | Instantiate every Library graph (batched) — health check after an SD update |
+| `close_package` | Close a package (refuses unsaved changes unless `force`) |
 | **`get_recipe_info`** | **Get details about a specific recipe** |
 | **`apply_recipe`** | **Apply a recipe to an existing graph** |
 
@@ -280,6 +284,31 @@ These are hard constraints of the SD 15.x API — violating them hangs or crashe
 | `histogram_scan` | `Output` | `Position`, `Contrast`, `Input_1` |
 | `invert_grayscale` | `Invert_Grayscale` | `Source` |
 | `crystal_1` | `output` | `scale`, `disorder` |
+
+---
+
+## Testing
+
+Two levels of tests, both need Substance Designer running with the plugin loaded:
+
+```bash
+python tests/test_connection.py          # is the plugin reachable on port 9881?
+python tests/run_regression.py --quick   # ~2 min smoke test
+python tests/run_regression.py           # full suite (~15 min on SD 16.0.5)
+```
+
+`run_regression.py` uses only the Python standard library and talks to the plugin's TCP port directly. It builds everything in a fresh unsaved package (closed at the end) and checks:
+
+| Section | What is checked |
+|---|---|
+| recipes / heightmaps | every recipe builds with 0 node / 0 connection failures; height, base color, normal and roughness are not uniform; height is not low-contrast (`render_outputs` statistics) |
+| performance | a recipe that takes more than 10 s to render at 256 px |
+| library | every graph visible in SD's Library instantiates (`validate_library`) |
+| sd16 | OpenPBR identifiers / dual usages, SDF scene, Shape splatter v2 SDF rock, pixel-processor function |
+
+Known problems live in `tests/regression_baseline.json`: they are reported as **KNOWN** and do not fail the run; a listed problem that passes is reported as **FIXED** (remove it from the baseline). Any other failure is **FAIL** and the script exits with code 1. Reports (Markdown + JSON with all statistics) are written to `tests/reports/`.
+
+Current baseline on SD 16.0.5: 12 recipes with flat / low-contrast outputs (`pro_granite`, `pro_limestone`, `pro_sandstone`, `pro_basalt`, `pro_slate`, the 5 `gem_*`, `carbon_fiber`, `obsidian` normal) and 3 slow fabric recipes (`fabric_denim`, `fabric_silk`, `fabric_velvet`, 17–35 s at 256 px).
 
 ---
 
