@@ -32,7 +32,7 @@ CRITICAL RULES - DO NOT VIOLATE
   - ONE CALL AT A TIME. NEVER parallel. NEVER batch from outside.
   - newNode(unknown_def) HANGS SD 15 permanently
   - SDUsage.sNew() HANGS SD 15 permanently (works on SD 16.0.5 — usages only set on SD 16+)
-  - arrange_nodes() DESTROYS ALL connections
+  - arrange_nodes() only moves nodes (layered by data flow); connections are kept
   - Library node outputs are NEVER "unique_filter_output"
   - directionalwarp warp map port = "inputintensity" (NOT inputgradient)
   - connect_nodes with wrong port = crash. Plugin validates before calling SD.
@@ -60,6 +60,8 @@ VERSION HISTORY
           close_package; regression suite tests/run_regression.py
   3.7.0 - Recipe fixes found by the regression suite: pro_* rocks, gem_*, carbon_fiber,
           obsidian, fabric speed (~20x), rock_* tileable lumps
+  3.8.0 - Parameter failures reported (param_issues), $-params applied as Absolute,
+          set_parameter type coercion, arrange_nodes data-flow layout
 """
 
 import sd
@@ -118,7 +120,7 @@ except SDError:  # pragma: no cover
 
 # ── Configuration ────────────────────────────────────────────────────────────
 DEFAULT_PORTS     = [9881]
-PLUGIN_VERSION    = (3, 7, 0)
+PLUGIN_VERSION    = (3, 8, 0)
 HEADER_SIZE       = 4
 COMMAND_TIMEOUT   = 120
 CLIENT_TIMEOUT    = 130
@@ -1349,10 +1351,17 @@ class CommandHandler(FunctionGraphMixin, RenderMixin):
             pass
 
         for param_id, param_spec in params.items():
-            # Skip system params — they cannot be set as node inputs safely
-            if param_id.startswith("$"):
-                results[param_id] = "skipped_system"
-                continue
+            # System params ($outputsize, $format, $randomseed...): switch the
+            # inheritance to Absolute first, otherwise the value is ignored
+            # (or read as "relative to parent", see _set_absolute_output_size).
+            is_system = param_id.startswith("$")
+            if is_system and param_id in input_type_map and SDPropertyInheritanceMethod is not None:
+                try:
+                    prop = node.getPropertyFromId(param_id, SDPropertyCategory.Input)
+                    node.setPropertyInheritanceMethod(prop, SDPropertyInheritanceMethod.Absolute)
+                except SDError as e:
+                    results[param_id] = "set_failed: inheritance: {}".format(e)
+                    continue
             try:
                 if isinstance(param_spec, dict) and "value" in param_spec:
                     pval  = param_spec["value"]
@@ -1366,24 +1375,46 @@ class CommandHandler(FunctionGraphMixin, RenderMixin):
                               or annot_type_map.get(param_id) or "")
                 ptype = _coerce_type(ptype, pval, sd_type_id)
 
+                if param_id not in input_type_map and param_id not in annot_type_map:
+                    results[param_id] = "unknown_parameter"
+                    continue
                 sd_val = self._make_sd_value(ptype, pval)
-                set_ok = False
+                set_ok, last_err = False, None
                 if param_id in input_type_map:
                     try:
                         node.setInputPropertyValueFromId(param_id, sd_val)
                         set_ok = True
-                    except SDError:
-                        pass
+                    except SDError as e:
+                        last_err = e
                 if not set_ok and param_id in annot_type_map:
                     try:
                         node.setAnnotationPropertyValueFromId(param_id, sd_val)
                         set_ok = True
-                    except SDError:
-                        pass
-                results[param_id] = "ok" if set_ok else "skipped"
+                    except SDError as e:
+                        last_err = e
+                results[param_id] = "ok" if set_ok else "set_failed: {}".format(last_err)
             except SDError as e:
                 results[param_id] = "error: {}".format(e)
         return results
+
+    @staticmethod
+    def _param_issues(alias, node, results):
+        """Non-'ok' parameter results as a list of issues; unknown parameters
+        include the node's real parameter ids so the caller can fix the name."""
+        issues = []
+        for pid, status in (results or {}).items():
+            if status == "ok":
+                continue
+            item = {"alias": alias, "parameter": pid, "status": status}
+            if status == "unknown_parameter":
+                try:
+                    item["available"] = sorted(
+                        p.getId() for p in node.getProperties(SDPropertyCategory.Input)
+                        if not p.isConnectable() and not p.getId().startswith("$"))[:60]
+                except SDError:
+                    pass
+            issues.append(item)
+        return issues
 
     def _safe_connect(self, graph, from_node, from_out, to_node, to_in):
         """Connect nodes with port validation. Returns True on success."""
@@ -2077,6 +2108,20 @@ class CommandHandler(FunctionGraphMixin, RenderMixin):
                       graph_identifier=None):
         graph = self._resolve_graph(graph_identifier)
         node  = self._find_node(graph, node_id)
+        # Coerce to the property's real type (a float value on an enum/int
+        # property crashes SD silently) — same rule as _set_node_params.
+        sd_type_id = ""
+        try:
+            prop = node.getPropertyFromId(parameter_id, SDPropertyCategory.Input) or \
+                node.getPropertyFromId(parameter_id, SDPropertyCategory.Annotation)
+            if prop is not None:
+                sd_type_id = prop.getType().getId()
+                if parameter_id.startswith("$") and SDPropertyInheritanceMethod is not None:
+                    node.setPropertyInheritanceMethod(prop, SDPropertyInheritanceMethod.Absolute)
+        except SDError:
+            pass
+        requested_type = value_type
+        value_type = _coerce_type(value_type, value, sd_type_id)
         sd_value = self._make_sd_value(value_type, value)
 
         input_ids  = set()
@@ -2119,6 +2164,8 @@ class CommandHandler(FunctionGraphMixin, RenderMixin):
             "parameter_id": parameter_id,
             "value":        value,
             "value_type":   value_type,
+            "requested_type": requested_type,
+            "property_type": sd_type_id,
         }
 
     def _set_absolute_output_size(self, graph, width_log2, height_log2):
@@ -2180,6 +2227,7 @@ class CommandHandler(FunctionGraphMixin, RenderMixin):
         alias_map = {}       # alias -> (node_obj, node_id_str)
         created   = []
         failed    = []
+        param_issues = []    # parameters that were not applied (unknown / failed)
 
         for spec in nodes:
             defn_id  = spec.get("definition_id", "sbs::compositing::uniform")
@@ -2215,7 +2263,8 @@ class CommandHandler(FunctionGraphMixin, RenderMixin):
                     raise RuntimeError("newNode returned None for '{}'.".format(defn_id))
 
                 node.setPosition(float2(float(pos[0]), float(pos[1])))
-                self._set_node_params(node, params)
+                param_issues += self._param_issues(
+                    alias, node, self._set_node_params(node, params))
 
                 node_id = node.getIdentifier()
                 # deduplicate aliases
@@ -2268,6 +2317,8 @@ class CommandHandler(FunctionGraphMixin, RenderMixin):
             "nodes_failed":      len(failed),
             "connections_ok":    sum(1 for c in conn_results if c.get("success")),
             "connections_failed": sum(1 for c in conn_results if not c.get("success")),
+            "params_failed":     len(param_issues),
+            "param_issues":      param_issues,
             "node_map":          {a: nid for a, (_, nid) in alias_map.items()},
             "nodes":             created,
             "failed_nodes":      failed,
@@ -2448,6 +2499,7 @@ class CommandHandler(FunctionGraphMixin, RenderMixin):
         alias_map = {}
         created   = []
         failed    = []
+        param_issues = []
 
         for spec in nodes:
             defn_id    = spec.get("definition_id", "sbs::compositing::uniform")
@@ -2477,7 +2529,8 @@ class CommandHandler(FunctionGraphMixin, RenderMixin):
                     raise RuntimeError("newNode returned None.")
 
                 node.setPosition(float2(float(pos[0]), float(pos[1])))
-                self._set_node_params(node, params)
+                param_issues += self._param_issues(
+                    alias, node, self._set_node_params(node, params))
 
                 nid = node.getIdentifier()
                 counter = 0
@@ -2515,6 +2568,8 @@ class CommandHandler(FunctionGraphMixin, RenderMixin):
             "nodes_failed":      len(failed),
             "connections_ok":    sum(1 for c in conn_results if c.get("success")),
             "connections_failed": sum(1 for c in conn_results if not c.get("success")),
+            "params_failed":     len(param_issues),
+            "param_issues":      param_issues,
             "node_map":          {a: nid for a, (_, nid) in alias_map.items()},
         }
 
@@ -2524,33 +2579,66 @@ class CommandHandler(FunctionGraphMixin, RenderMixin):
 
     def arrange_nodes(self, graph_identifier=None, start_x=-1000, start_y=0,
                       node_spacing_x=200, node_spacing_y=150):
-        """
-        WARNING: DESTROYS all connections in SD 15. Use move_node() instead.
-        Only use when connections don't matter.
+        """Lay the graph out left-to-right by data flow: each node's column is
+        its longest distance from a source node, outputs end up on the right.
+        Only positions change — connections are untouched (verified on SD
+        16.0.5: 50 connections before/after on pro_granite, identical outputs;
+        the old "destroys all connections" note was never true for this code).
         """
         graph = self._resolve_graph(graph_identifier)
         nodes = list(graph.getNodes())
         if not nodes:
             return {"graph": graph.getIdentifier(), "arranged_nodes": 0,
                     "warning": "No nodes to arrange."}
-
-        per_row = max(1, int(len(nodes) ** 0.5) + 1)
-        x, y = float(start_x), float(start_y)
-        for i, node in enumerate(nodes):
+        by_id = {n.getIdentifier(): n for n in nodes}
+        inputs = {nid: set() for nid in by_id}          # nid -> upstream ids
+        n_conn = 0
+        for n in nodes:
             try:
-                node.setPosition(float2(x, y))
+                for p in n.getProperties(SDPropertyCategory.Input):
+                    for c in (n.getPropertyConnections(p) or []):
+                        src = c.getInputPropertyNode().getIdentifier()
+                        if src in by_id:
+                            inputs[n.getIdentifier()].add(src)
+                            n_conn += 1
             except SDError:
                 pass
-            x += node_spacing_x
-            if (i + 1) % per_row == 0:
-                x = float(start_x)
-                y += node_spacing_y
+        depth = {}
 
-        return {
-            "graph":          graph.getIdentifier(),
-            "arranged_nodes": len(nodes),
-            "warning":        "arrange_nodes DESTROYS all connections in SD 15.",
-        }
+        def _depth(nid, stack=()):
+            if nid in depth:
+                return depth[nid]
+            if nid in stack:          # cycle guard (should not happen in SD graphs)
+                return 0
+            d = 0
+            for up in inputs[nid]:
+                d = max(d, _depth(up, stack + (nid,)) + 1)
+            depth[nid] = d
+            return d
+
+        for nid in by_id:
+            _depth(nid)
+        # all graph outputs in the right-most column
+        last = max(depth.values() or [0])
+        for nid, n in by_id.items():
+            try:
+                if n.getDefinition().getId() == "sbs::compositing::output":
+                    depth[nid] = last
+            except SDError:
+                pass
+        columns = {}
+        for nid in sorted(by_id, key=lambda i: (depth[i], by_id[i].getPosition().y)):
+            columns.setdefault(depth[nid], []).append(nid)
+        for d, ids in columns.items():
+            y0 = float(start_y) - (len(ids) - 1) * node_spacing_y / 2.0
+            for row, nid in enumerate(ids):
+                try:
+                    by_id[nid].setPosition(float2(float(start_x) + d * node_spacing_x,
+                                                  y0 + row * node_spacing_y))
+                except SDError:
+                    pass
+        return {"graph": graph.getIdentifier(), "arranged_nodes": len(nodes),
+                "columns": len(columns), "connections_kept": n_conn}
 
     def list_documentation(self, category="all", filter_text="", node_name="",
                             action="", topic="", query=""):

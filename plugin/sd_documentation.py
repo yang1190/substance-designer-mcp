@@ -1341,7 +1341,7 @@ WORKFLOW = {
         "ALWAYS VERIFY: after building or editing a graph call render_outputs and look at the thumbnails/stats — 'flat' or 'low_contrast' outputs mean a broken chain",
         "newNode(unknown_def) HANGS SD 15 permanently — always validate first",
         "SDUsage.sNew() HANGS SD 15 — the plugin only uses it on SD 16+ (verified on 16.0.5)",
-        "arrange_nodes() DESTROYS ALL connections — never use, use move_node() instead",
+        "arrange_nodes() lays the graph out left-to-right by data flow; it only moves nodes, connections are kept (verified SD 16.0.5)",
         "Library node output IDs ≠ 'unique_filter_output' — always get_node_info first",
         "directionalwarp warp map port = 'inputintensity' (NOT 'inputgradient')",
         "connect_nodes with wrong port ID crashes SD 15 — plugin validates before calling SD",

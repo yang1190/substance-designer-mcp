@@ -255,7 +255,7 @@ These are hard constraints of the SD 15.x API — violating them hangs or crashe
 - **ONE tool call at a time** — never parallel calls to SD tools
 - `SDUsage.sNew()` **hangs SD 15 permanently** — only used on SD 16+ (verified OK on 16.0.5)
 - `newNode(unknown_definition)` **hangs SD 15 permanently** — plugin validates before calling
-- `arrange_nodes()` **destroys all connections** — use `move_node()` instead
+- ~~`arrange_nodes()` destroys all connections~~ — not true: it only moves nodes (verified on SD 16.0.5, connections and outputs unchanged). Since plugin 3.8.0 it lays the graph out by data flow
 - Library node outputs are **never** `"unique_filter_output"` — always call `get_node_info` first
 - `directionalwarp` warp-map port = `"inputintensity"` (NOT `inputgradient`)
 - Wrong port ID in `connect_nodes` = crash — plugin validates before calling SD
@@ -292,10 +292,13 @@ These are hard constraints of the SD 15.x API — violating them hangs or crashe
 Two levels of tests, both need Substance Designer running with the plugin loaded:
 
 ```bash
+python -m unittest tests/test_offline.py # offline checks, no SD needed (also run by GitHub Actions)
 python tests/test_connection.py          # is the plugin reachable on port 9881?
 python tests/run_regression.py --quick   # ~2 min smoke test
 python tests/run_regression.py           # full suite (~15 min on SD 16.0.5)
 ```
+
+`test_offline.py` needs no Substance Designer: it checks the syntax of every file, the recipe structure (aliases, connections, outputs), and validates every recipe connection port and parameter id against `tests/data/sd_node_ports.json` — a snapshot of the real node definitions taken from SD with `python tests/update_port_snapshot.py` (rerun it after an SD update). With the `mcp` package installed it also checks the bridge tools. `.github/workflows/ci.yml` runs it on every push.
 
 `run_regression.py` uses only the Python standard library and talks to the plugin's TCP port directly. It builds everything in a fresh unsaved package (closed at the end) and checks:
 

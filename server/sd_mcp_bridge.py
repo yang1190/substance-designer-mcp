@@ -35,10 +35,11 @@ import threading
 from typing import Any, List, Optional
 from contextlib import asynccontextmanager
 
-# Ensure venv site-packages on path
+# Ensure venv site-packages on path (Windows venv layout only — on Linux/macOS a
+# Windows .venv in the same checkout would shadow the real packages)
 script_dir = os.path.dirname(os.path.abspath(__file__))
 venv_site = os.path.join(script_dir, '.venv', 'Lib', 'site-packages')
-if os.path.exists(venv_site):
+if os.name == 'nt' and os.path.exists(venv_site):
     sys.path.insert(0, venv_site)
 
 from mcp.server.fastmcp import FastMCP, Context, Image
@@ -558,7 +559,7 @@ async def move_node(ctx: Context,
     - position: [x, y] new position
     - graph_identifier: target graph (None = current)
 
-    PREFER move_node over arrange_nodes — arrange_nodes DESTROYS all connections in SD 15.
+    To lay out a whole graph automatically use arrange_nodes (keeps connections).
     """
     return await _async_send("move_node", {
         "node_id": node_id,
@@ -652,14 +653,13 @@ async def arrange_nodes(ctx: Context,
                         node_spacing_x: float = 200,
                         node_spacing_y: float = 150) -> str:
     """
-    Auto-arrange all nodes in a graph in a grid layout.
+    Lay out all nodes left-to-right by data flow (column = distance from the
+    source nodes, outputs on the right). Only positions change; connections
+    are kept (verified on SD 16.0.5).
     - graph_identifier: target graph (None = current)
     - start_x, start_y: starting position
     - node_spacing_x, node_spacing_y: spacing between nodes
 
-    WARNING: In SD 15, arrange_nodes DESTROYS all node connections.
-    Use move_node() instead to reposition nodes without losing connections.
-    Only use this tool when you don't mind reconnecting all nodes manually.
     """
     return await _async_send("arrange_nodes", {
         "graph_identifier": graph_identifier,
@@ -726,7 +726,11 @@ async def create_batch_graph(ctx: Context,
 
     material_model: SD 16+ only (None = OpenPBR, '' = Undefined)
 
-    Returns: node_map {alias -> actual_node_id} + creation stats
+    Returns: node_map {alias -> actual_node_id} + creation stats.
+    CHECK params_failed / param_issues: a misspelled or invalid parameter is
+    NOT applied (the node keeps its default) — each issue lists the node's real
+    parameter ids. System parameters such as "$outputsize" are applied as
+    Absolute values.
     """
     return await _async_send("create_batch_graph", {
         "material_model": material_model,

@@ -1,0 +1,721 @@
+{
+ "atomic": {
+  "sbs::compositing::blend": {
+   "annotations": [],
+   "inputs": [
+    "source",
+    "destination",
+    "opacity"
+   ],
+   "outputs": [
+    "unique_filter_output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "alphablending": "bool",
+    "blendingmode": "sbs::compositing::blendingmode",
+    "colorblending": "sbs::compositing::colorblending",
+    "maskrectangle": "float4",
+    "maskvectorresourcepath": "string",
+    "opacitymult": "float"
+   }
+  },
+  "sbs::compositing::directionalwarp": {
+   "annotations": [],
+   "inputs": [
+    "input1",
+    "inputintensity"
+   ],
+   "outputs": [
+    "unique_filter_output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "intensity": "float",
+    "intensityoffset": "float",
+    "warpangle": "float",
+    "warpfilter": "bool"
+   }
+  },
+  "sbs::compositing::levels": {
+   "annotations": [],
+   "inputs": [
+    "input1"
+   ],
+   "outputs": [
+    "unique_filter_output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "clampinterm": "bool",
+    "levelinhigh": "float4",
+    "levelinlow": "float4",
+    "levelinmid": "float4",
+    "levelouthigh": "float4",
+    "leveloutlow": "float4"
+   }
+  },
+  "sbs::compositing::normal": {
+   "annotations": [],
+   "inputs": [
+    "input1"
+   ],
+   "outputs": [
+    "unique_filter_output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "input2alpha": "bool",
+    "intensity": "float",
+    "inversedy": "bool"
+   }
+  },
+  "sbs::compositing::output": {
+   "annotations": [
+    "label",
+    "description",
+    "identifier",
+    "userdata",
+    "group",
+    "visible_if",
+    "usages",
+    "mipmaps",
+    "format"
+   ],
+   "inputs": [
+    "inputNodeOutput"
+   ],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {}
+  },
+  "sbs::compositing::transformation": {
+   "annotations": [],
+   "inputs": [
+    "input1"
+   ],
+   "outputs": [
+    "unique_filter_output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "filtering": "sbs::compositing::filtering",
+    "manualmiplevel": "int",
+    "matrix22": "float4",
+    "mattecolor": "ColorRGBA",
+    "mipmapmode": "sbs::compositing::mipmapmode",
+    "offset": "float2"
+   }
+  },
+  "sbs::compositing::uniform": {
+   "annotations": [],
+   "inputs": [],
+   "outputs": [
+    "unique_filter_output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "colorswitch": "bool",
+    "outputcolor": "ColorRGBA"
+   }
+  },
+  "sbs::compositing::warp": {
+   "annotations": [],
+   "inputs": [
+    "input1",
+    "inputgradient"
+   ],
+   "outputs": [
+    "unique_filter_output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "intensity": "float",
+    "warpfilter": "bool"
+   }
+  }
+ },
+ "library": {
+  "blur_hq_grayscale": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [
+    "Source"
+   ],
+   "outputs": [
+    "Blur_HQ"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "Intensity": "float",
+    "Quality": "int"
+   }
+  },
+  "cells_1": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "angle": "float",
+    "angle_random": "float",
+    "disorder": "float",
+    "disorder_anisotropy": "float",
+    "disorder_anisotropy_angle": "float",
+    "disorder_speed": "float",
+    "luminance_random": "float",
+    "non_square_expansion": "bool",
+    "pattern": "sbs::compositing::pattern",
+    "pattern_scale": "float",
+    "pattern_size": "float2",
+    "scale": "int",
+    "tile_offset": "float2"
+   }
+  },
+  "cells_2": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "disorder": "float",
+    "disorder_speed": "float",
+    "edge_width": "float",
+    "invert": "bool",
+    "non_square_expansion": "bool",
+    "scale": "int"
+   }
+  },
+  "cells_4": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [
+    "input"
+   ],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "color_source": "sbs::compositing::color_source",
+    "disorder": "float",
+    "disorder_speed": "float",
+    "non_square_expansion": "bool",
+    "pseudo_random_seed": "int",
+    "scale": "int"
+   }
+  },
+  "clouds_2": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "disorder": "float",
+    "disorder_anisotropy": "float",
+    "disorder_anisotropy_angle": "float",
+    "disorder_speed": "float",
+    "non_square_expansion": "bool",
+    "scale": "int",
+    "tile_offset": "float2"
+   }
+  },
+  "crystal_1": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "disorder": "float",
+    "non_square_expansion": "bool",
+    "scale": "int"
+   }
+  },
+  "edge_detect": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [
+    "input"
+   ],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "edge_roundness": "float",
+    "edge_width": "float",
+    "invert": "bool",
+    "tolerance": "float"
+   }
+  },
+  "flood_fill": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [
+    "mask"
+   ],
+   "outputs": [
+    "output",
+    "referenceMap"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "advanced": "bool",
+    "profile": "sbs::compositing::profile",
+    "profileOverride": "int"
+   }
+  },
+  "flood_fill_to_gradient_2": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [
+    "input",
+    "angle_input",
+    "slope_input"
+   ],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "angle": "float",
+    "angle_image_input_multiplier": "float",
+    "angle_variation": "float",
+    "flat_slope_color": "float",
+    "multiply_by_bbox_size": "float",
+    "multiply_by_slope_intensity": "float",
+    "slope_image_input_multiplier": "float"
+   }
+  },
+  "flood_fill_to_grayscale": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [
+    "input",
+    "grayscale_input"
+   ],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "filtering_mode": "sbs::compositing::filtering_mode",
+    "luminance_adjustement": "float",
+    "luminance_random": "float"
+   }
+  },
+  "gradient_axial": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "non_square_expansion": "bool",
+    "point_1": "float2",
+    "point_2": "float2"
+   }
+  },
+  "gradient_linear_1": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [],
+   "outputs": [
+    "Simple_Gradient"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "Tiling": "int",
+    "rotation": "sbs::compositing::rotation"
+   }
+  },
+  "highpass_grayscale": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [
+    "Source"
+   ],
+   "outputs": [
+    "Highpass"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "Radius": "float"
+   }
+  },
+  "histogram_scan": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [
+    "Input_1"
+   ],
+   "outputs": [
+    "Output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "Contrast": "float",
+    "Invert_Position": "bool",
+    "Position": "float"
+   }
+  },
+  "invert_grayscale": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [
+    "Source"
+   ],
+   "outputs": [
+    "Invert_Grayscale"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "invert": "bool"
+   }
+  },
+  "multi_directional_warp_grayscale": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [
+    "input",
+    "intensity_input"
+   ],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "directions": "sbs::compositing::directions",
+    "intensity": "float",
+    "mode": "sbs::compositing::mode",
+    "warp_angle": "float"
+   }
+  },
+  "non_uniform_blur_grayscale": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [
+    "Source",
+    "Effect"
+   ],
+   "outputs": [
+    "Non_Uniform_Blur"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "Angle": "float",
+    "Anisotropy": "float",
+    "Asymmetry": "float",
+    "Blades": "int",
+    "Intensity": "float",
+    "Samples": "int"
+   }
+  },
+  "perlin_noise": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "disorder": "float",
+    "disorder_speed": "float",
+    "non_square_expansion": "bool",
+    "scale": "int",
+    "tile_offset": "float2"
+   }
+  },
+  "polygon_2": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "Curve": "float",
+    "Gradient": "float",
+    "InvertGradient": "bool",
+    "Rotation": "float",
+    "Scale": "float",
+    "Sides": "int",
+    "Tiling": "int",
+    "autoscale": "bool",
+    "non_square_expansion": "bool"
+   }
+  },
+  "slope_blur_grayscale_2": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [
+    "Source",
+    "Effect"
+   ],
+   "outputs": [
+    "Slope_Blur"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "Intensity": "float",
+    "Samples": "int",
+    "mode": "sbs::compositing::mode"
+   }
+  },
+  "tile_random": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [
+    "pattern_input",
+    "background_input"
+   ],
+   "outputs": [
+    "output"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "background_color": "float",
+    "blending_mode": "sbs::compositing::blending_mode",
+    "image_input_filtering": "sbs::compositing::image_input_filtering",
+    "interstice_amount": "float",
+    "interstice_mode": "sbs::compositing::interstice_mode",
+    "mask_invert": "bool",
+    "mask_random": "float",
+    "non_square_expansion": "bool",
+    "pattern": "sbs::compositing::pattern",
+    "pattern_color": "float",
+    "pattern_color_parametrisation": "sbs::compositing::pattern_color_parametrisation",
+    "pattern_color_parametrisation_intensity": "float",
+    "pattern_color_random": "float",
+    "pattern_rotation": "sbs::compositing::pattern_rotation",
+    "pattern_rotation_random": "float",
+    "pattern_specific": "float",
+    "pattern_specific_random": "float",
+    "pattern_symmetry_random": "float",
+    "pattern_symmetry_random_mode": "sbs::compositing::pattern_symmetry_random_mode",
+    "position_offset": "float",
+    "position_offset_random": "float",
+    "position_random": "float",
+    "position_random_constraints": "bool",
+    "shape_rotation": "float",
+    "shape_rotation_constraint": "bool",
+    "shape_rotation_random": "float",
+    "shape_scale": "float",
+    "shape_scale_random": "float",
+    "size_random_x": "float",
+    "size_random_y": "float",
+    "split_mode": "sbs::compositing::split_mode",
+    "split_multiplier": "int",
+    "split_threshold": "float",
+    "x_amount": "int",
+    "y_amount": "int"
+   }
+  },
+  "weave_generator": {
+   "annotations": [
+    "physical_size"
+   ],
+   "inputs": [],
+   "outputs": [
+    "Height",
+    "Opacity",
+    "Mask_1",
+    "Mask_2"
+   ],
+   "parameters": {
+    "$format": "sbs::compositing::format",
+    "$outputsize": "int2",
+    "$pixelratio": "sbs::compositing::pixelratio",
+    "$pixelsize": "float2",
+    "$randomseed": "int",
+    "$tiling": "sbs::compositing::tiling",
+    "gap": "float2",
+    "non_square_expansion": "bool",
+    "shape": "float",
+    "tile_x": "int",
+    "tile_y": "int",
+    "weave": "int"
+   }
+  }
+ },
+ "plugin_version": "3.7.0",
+ "sd_version": "16.0.5"
+}

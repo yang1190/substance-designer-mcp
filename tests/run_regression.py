@@ -10,8 +10,8 @@ MCP plugin loaded (talks to the plugin's TCP port directly, no MCP client needed
 
 What it checks
   1. environment       SD / Python / plugin versions, usages enabled
-  2. recipes           every material recipe builds with 0 node / 0 connection
-                       failures, and its height + baseColor outputs are not flat
+  2. recipes           every material recipe builds with 0 node / 0 connection /
+                       0 parameter failures, and its outputs are not flat
   3. heightmaps        every heightmap style, same checks
   4. library           every graph visible in SD's Library instantiates, then a
                        few recipes are rebuilt (resolution must ignore Legacy
@@ -179,6 +179,10 @@ def check_build(sd, rep, section, name, build, pkg, res_log2):
             problems.append("{} node failures".format(r["nodes_failed"]))
         if r.get("connections_failed"):
             problems.append("{} connection failures".format(r["connections_failed"]))
+        if r.get("params_failed"):
+            problems.append("{} parameters not applied: {}".format(
+                r["params_failed"], ", ".join("{}.{}".format(i.get("alias"), i.get("parameter"))
+                                              for i in r.get("param_issues", [])[:5])))
         t = time.time()
         rend = sd.call("render_outputs", graph_identifier=gid, thumbnails=False)
         problems += _quality_problems(rend)

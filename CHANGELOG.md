@@ -4,6 +4,27 @@ All notable changes to the Substance Designer MCP Plugin are documented here.
 
 ---
 
+## [1.5.0] — 2026-10-20 — No more silent failures; offline CI
+
+### Plugin (v3.8.0)
+- **Parameter failures are reported**: `create_batch_graph`, `build_material_graph`, `build_heightmap_graph` and `apply_recipe` return `params_failed` and `param_issues` (`unknown_parameter` with the node's real parameter ids, or `set_failed: <error>`). Before, a misspelled parameter was silently ignored and the node kept its default
+- System parameters (`$outputsize`, `$format`, `$randomseed`...) in batch descriptors are applied as Absolute values; they were silently skipped although the bridge docs used `$outputsize` as an example
+- `set_parameter` coerces the value to the property's real type (a float on an enum/int crashes SD) and sets `$` parameters as Absolute
+- `arrange_nodes`: verified on SD 16.0.5 that it never touched connections (50 before/after on pro_granite, identical outputs) — the "destroys all connections" warning was wrong and is removed from README, knowledge base and tool docs. It now lays the graph out left-to-right by data flow, outputs in the last column
+
+### Bridge Server
+- `.venv` path injection only on Windows (a Windows `.venv` in the checkout broke imports on Linux/macOS)
+- `create_batch_graph` docs: check `params_failed` / `param_issues`
+
+### Tests
+- `tests/test_offline.py` (no SD): syntax, recipe structure, recipe ports and parameter ids against `tests/data/sd_node_ports.json`, bridge tools and image conversion. A mutation check (typo'd parameter, Legacy port name, unknown alias) fails all three relevant tests
+- `tests/update_port_snapshot.py`: regenerates the port snapshot from a live SD (22 library + 8 atomic node types on 16.0.5)
+- `.github/workflows/ci.yml`: runs the offline tests on every push / pull request
+- `run_regression.py`: parameter failures count as FAIL
+- Full run on SD 16.0.5 with plugin 3.8.0: **99 pass, 0 fail** (including the new parameter check — no recipe has an unapplied parameter); offline tests: 8/8 pass
+
+---
+
 ## [1.4.0] — 2026-10-20 — Recipe fixes found by the regression suite
 
 ### Plugin (v3.7.0) — recipes
