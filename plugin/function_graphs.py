@@ -25,26 +25,17 @@ Facts confirmed on SD 16.0.5:
 import os
 import re
 
-import sd
 from sd.api.sdproperty import SDPropertyCategory
 from sd.api.sdbasetypes import float2
 from sd.api.sdvaluestring import SDValueString
-from sd.api.sdvalueint import SDValueInt
+
+from .common import SDError, _log
 
 try:
     from sd.api.sbs.sdsbsfunctiongraph import SDSBSFunctionGraph
 except Exception:  # pragma: no cover
     SDSBSFunctionGraph = None
-try:
-    from sd.api.apiexception import APIException
-except Exception:  # pragma: no cover
-    class APIException(Exception):
-        pass
-SDError = (Exception, APIException)  # SD API errors derive from BaseException
 
-
-def _log(msg):
-    print("[SD-MCP] {}".format(msg))
 
 
 # ── type helpers ──────────────────────────────────────────────────────────────

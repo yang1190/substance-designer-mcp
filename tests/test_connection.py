@@ -55,7 +55,7 @@ def test_command(command, label=""):
 
         response_bytes = recv_framed(sock)
         if response_bytes is None:
-            print(f"  FAIL: No response received")
+            print("  FAIL: No response received")
             return False
 
         response = json.loads(response_bytes.decode("utf-8"))

@@ -55,7 +55,7 @@ AI Client (Claude / Cursor)
 sd_mcp_bridge.py  (FastMCP server, Python 3.12)
         │  TCP localhost:9881 (length-prefix framing)
         ▼
-SD Plugin __init__.py  (runs inside SD: Python 3.11 on SD 15 / 3.13 on SD 16)
+SD plugin package plugin/  (runs inside SD: Python 3.11 on SD 15 / 3.13 on SD 16)
         │  sd.api
         ▼
 Adobe Substance 3D Designer 15.x / 16.0.x
@@ -87,12 +87,23 @@ Copy the `plugin/` folder contents to your SD user scripts directory:
 
 The directory must contain:
 ```
-sd_mcp_plugin/
-├── __init__.py          ← main plugin (TCP listener, all MCP tools)
+sd_mcp_plugin/           ← copy every .py file from plugin/
+├── __init__.py          ← SD entry points (initializeSDPlugin / uninitializeSDPlugin)
+├── common.py            ← shared imports, constants, helpers, SDError
+├── transport.py         ← Qt main-thread dispatcher + TCP server (port 9881)
+├── handler.py           ← CommandHandler: command table built from the mixins below
+├── core.py              ← SD helpers: lookup, values, parameters, usages, material model
+├── library.py           ← Library node resolution (resources/packages, non-legacy first)
+├── scene_tools.py       ← scene / package / graph tools, diagnostic
+├── node_tools.py        ← node / connection / parameter tools, arrange_nodes
+├── builders.py          ← batch graph builder, recipe builders
 ├── function_graphs.py   ← function graphs, SDF, Shape splatter v2 (SD 16+)
-├── recipes.py           ← 79 material recipes
+├── render.py            ← render_outputs / export_outputs / validate_library
+├── recipes.py           ← 79 material recipes + 8 heightmap styles
 └── sd_documentation.py  ← embedded knowledge base (list_documentation)
 ```
+
+When updating, copy **all** files and delete `__pycache__/`, then restart SD.
 
 SD auto-loads all plugins from `sduserplugins/` on startup. No additional configuration needed.
 
@@ -356,3 +367,5 @@ PRs welcome. Key areas for improvement:
 - Color graph support (currently height/grayscale focused)
 - Windows + macOS path handling for plugin install
 - Auto-install script for the SD plugin
+
+Before opening a PR run `python -m unittest tests/test_offline.py` (also run by CI) and, with SD open, `python tests/run_regression.py --quick`.

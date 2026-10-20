@@ -4,6 +4,24 @@ All notable changes to the Substance Designer MCP Plugin are documented here.
 
 ---
 
+## [1.6.0] — 2026-10-20 — Code reorganisation
+
+### Plugin (v3.9.0) — no behaviour change
+- `plugin/__init__.py` (2755 lines) split into modules: `common.py` (imports, constants, helpers, `SDError`), `transport.py` (Qt dispatcher + TCP server), `handler.py` (`CommandHandler`), and feature mixins `core.py`, `library.py`, `scene_tools.py`, `node_tools.py`, `builders.py`; `__init__.py` now only holds the SD entry points and the module map
+- The node-creation / connection loop that `create_batch_graph` and `apply_recipe` each had a copy of is now one `_populate_graph`; recipe overrides / offsets share `_recipe_variant`. `apply_recipe` now also returns `failed_nodes` and per-connection results
+- `function_graphs.py` and `render.py` use the shared `SDError` / `_log` from `common.py`
+- Removed dead code: `server/sd_node_recipes.py` (1322 lines, never imported), unused `BLEND_MODES`, `_library_cache`, `_QTimer`, `_resolve_lib_url`, unused imports; outdated version history moved out of the module docstring (see this file)
+- pyflakes clean across `plugin/`, `server/sd_mcp_bridge.py` and `tests/`
+
+### Verification
+- Six recipes built with the old (3.8.0) and new (3.9.0) code give identical node/connection counts and identical output statistics; `apply_recipe`, `arrange_nodes`, SDF scene, diagnostic, documentation, `execute_code` and `validate_library` checked on SD 16.0.5
+- Offline tests 8/8; full regression after deploying 3.9.0 on SD 16.0.5: **99 pass, 0 fail**; `tests/update_port_snapshot.py` regenerates an identical snapshot (only the plugin version changes)
+
+### Housekeeping
+- Deleted the test artefacts created during development (`SD_Textures/MCP_Dev/_mcp_tests`, temporary `sd_mcp_sd16_deptest.sbs`)
+
+---
+
 ## [1.5.0] — 2026-10-20 — No more silent failures; offline CI
 
 ### Plugin (v3.8.0)

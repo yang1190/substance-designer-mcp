@@ -21,19 +21,11 @@ import struct
 import time
 import base64
 
-import sd
 from sd.api.sdproperty import SDPropertyCategory
 
-try:
-    from sd.api.apiexception import APIException
-except Exception:  # pragma: no cover
-    class APIException(Exception):
-        pass
-SDError = (Exception, APIException)  # SD API errors derive from BaseException
+from .common import SDError
 
 
-def _log(msg):
-    print("[SD-MCP] {}".format(msg))
 
 
 # ── raw texture access ───────────────────────────────────────────────────────
