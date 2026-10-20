@@ -939,6 +939,134 @@ LIBRARY_NODES = {
             "Perfect for controlling how much of a noise shape is visible",
         ],
     },
+    # ── SD 16.0 additions (ports confirmed on SD 16.0.5) ──────────────────
+    "shape_splatter_v2": {
+        "identifier": "shape_splatter_v2",
+        "display_name": "Shape splatter v2",
+        "category": "Pattern (SD 16+)",
+        "description": (
+            "Scatters shapes on a background height surface in a virtual 3D space, "
+            "with position/rotation/scale/randomness controls, built-in primitives, "
+            "extrusion and SDF material outputs. Successor of shape_splatter."
+        ),
+        "output_id": "height",
+        "outputs": {"height": "grayscale", "normal": "color", "sdf_color": "color",
+                    "sdf_metalness": "grayscale", "sdf_roughness": "grayscale",
+                    "shape_splatter_uvw": "color",
+                    "shape_splatter_data_1": "color", "shape_splatter_data_2": "color",
+                    "shape_splatter_data_3": "color", "shape_splatter_data_4": "color"},
+        "inputs": ["background_height", "density_map", "height_offset_map", "height_scale_map",
+                   "shape_scale_map", "shape_rotation_map", "vector_map", "mask_map",
+                   "pattern_input_1..8", "grid_atlas_height", "grid_atlas_normal"],
+        "key_parameters": {
+            "position_distribution_mode": {"type": "enum", "default": 0},
+            "x_amount":  {"type": "int", "default": 16},
+            "y_amount":  {"type": "int", "default": 16},
+            "amount":    {"type": "int", "default": 64},
+            "shape_type": {"type": "enum", "default": 2, "description": "Built-in primitive / pattern input / grid atlas"},
+            "grid_atlas_size": {"type": "int2", "default": [4, 4]},
+            "pattern_input_number": {"type": "int", "default": 1},
+            "enable_shape_extrude": {"type": "bool", "default": True},
+        },
+        "tips": [
+            "Feed shape_splatter_uvw + shape_splatter_data_1..4 into the v2 mappers to texture each shape",
+            "Pack many shapes with grid_atlas_grayscale -> grid_atlas_height",
+        ],
+    },
+    "shape_splatter_mapper_grayscale": {
+        "identifier": "shape_splatter_mapper_grayscale",
+        "display_name": "Shape splatter v2 mapper grayscale",
+        "category": "Pattern (SD 16+)",
+        "description": "Maps grayscale images onto shapes scattered by Shape splatter v2 (planar/triplanar projection).",
+        "output_id": "output",
+        "outputs": {"output": "grayscale"},
+        "inputs": ["grid_atlas_input", "pattern_input_1..8", "background_input", "color_input",
+                   "normal", "shape_splatter_uvw", "shape_splatter_data_1..4"],
+        "key_parameters": {
+            "projection_mode": {"type": "enum", "default": 0},
+            "input_selection_mode": {"type": "enum", "default": 0},
+            "pattern_input_number": {"type": "int", "default": 1},
+            "random_range": {"type": "int2", "default": [1, 8]},
+            "luminance_random": {"type": "float", "default": 0.0},
+        },
+        "tips": ["Connect the matching shape_splatter_v2 outputs (normal, uvw, data_1..4) port-to-port"],
+    },
+    "shape_splatter_mapper_color": {
+        "identifier": "shape_splatter_mapper_color",
+        "display_name": "Shape splatter v2 mapper color",
+        "category": "Pattern (SD 16+)",
+        "description": "Color version of the v2 mapper. Can also map normal maps (is_normal=True).",
+        "output_id": "output",
+        "outputs": {"output": "color"},
+        "inputs": ["grid_atlas_input", "pattern_input_1..8", "background_input", "color_input",
+                   "normal", "shape_splatter_uvw", "shape_splatter_data_1..4"],
+        "key_parameters": {
+            "projection_mode": {"type": "enum", "default": 0},
+            "is_normal": {"type": "bool", "default": False},
+            "hsl_random": {"type": "float3", "default": [0, 0, 0]},
+        },
+    },
+    "shape_splatter_to_mask": {
+        "identifier": "shape_splatter_to_mask",
+        "display_name": "Shape splatter to mask",
+        "category": "Pattern",
+        "description": "Builds a mask of a range of shape IDs from shape splatter data.",
+        "output_id": "position",
+        "outputs": {"position": "grayscale"},
+        "inputs": ["splatter_data_1"],
+        "key_parameters": {
+            "id_range_start": {"type": "int", "default": 1},
+            "id_range_end":   {"type": "int", "default": 1},
+            "random_mask":    {"type": "float", "default": 0.0},
+        },
+    },
+    "grid_atlas_grayscale": {
+        "identifier": "grid_atlas_grayscale",
+        "display_name": "Grid atlas grayscale",
+        "category": "Utility (SD 16+)",
+        "description": "Packs up to 16 grayscale images on an XY grid, sampled by Shape splatter v2 / v2 mappers.",
+        "output_id": "output",
+        "outputs": {"output": "grayscale"},
+        "inputs": ["input_1..16"],
+        "key_parameters": {"grid_size_x": {"type": "int", "default": 2},
+                           "grid_size_y": {"type": "int", "default": 2}},
+    },
+    "grid_atlas_color": {
+        "identifier": "grid_atlas_color",
+        "display_name": "Grid atlas color",
+        "category": "Utility (SD 16+)",
+        "description": "Color version of Grid atlas.",
+        "output_id": "output",
+        "outputs": {"output": "color"},
+        "inputs": ["input_1..16"],
+        "key_parameters": {"grid_size_x": {"type": "int", "default": 2},
+                           "grid_size_y": {"type": "int", "default": 2}},
+    },
+    "angle_to_vector": {
+        "identifier": "angle_to_vector",
+        "display_name": "Angle to vector",
+        "category": "Utility (SD 16+)",
+        "description": "Converts an angle map into a vector map (e.g. for vector warp / shape splatter vector_map).",
+        "output_id": "output",
+        "outputs": {"output": "color"},
+        "inputs": ["input"],
+        "key_parameters": {"vector_format": {"type": "enum", "default": 1},
+                           "angle_offset":  {"type": "float", "default": 0.0}},
+    },
+    "3d_viewer": {
+        "identifier": "3d_viewer",
+        "display_name": "3D viewer",
+        "category": "3D (SD 16+)",
+        "description": "Renders an SDF / intersection scene defined by a function graph, with camera and environment light.",
+        "output_id": "output",
+        "outputs": {"output": "color"},
+        "inputs": ["environment", "input_1", "input_2"],
+        "key_parameters": {"scene_type": {"type": "enum", "default": 0},
+                           "ray_marching_steps": {"type": "int", "default": 128}},
+        "tips": ["Build the scene with build_sdf_scene (creates the viewer + sdf_scene function)",
+                 "SDF primitives/operators/transforms/materials are FUNCTION-graph nodes: use "
+                 "list_sdf_functions and build_function_graph / build_sdf_scene"],
+    },
 }
 
 
@@ -1303,6 +1431,49 @@ SHORTCUTS = {
 # ════════════════════════════════════════════════════════════════════════════
 
 CONCEPTS = {
+    "sd16_changes": {
+        "name": "Substance 3D Designer 16.0 — what changed for the MCP plugin",
+        "description": (
+            "SD 16 embeds Python 3.13 and Qt/PySide6 6.8, defaults new graphs to the "
+            "OpenPBR material model and adds Shape splatter v2, Grid atlas, Angle to "
+            "vector, 3D viewer, 3D SDF and Constant nodes. MDL graphs and Iray were removed."
+        ),
+        "key_facts": [
+            "Library nodes are resolved by graph identifier from <SD>/resources/packages; "
+            "'pkg:///x?dependency=N' UIDs are session-specific, use 'pkg:///x' or just 'x'",
+            "Several identifiers exist in multiple files; the plugin picks the version shown in "
+            "the Library (no hideInLibrary). Legacy copies have other port names "
+            "(e.g. clouds_2 Legacy outputs 'Clouds_2' instead of 'output')",
+            "Output nodes get real usages (baseColor/normal/...) on SD 16+ via SDUsage.sNew",
+            "Graph material model = annotation 'material_model': openpbr_v1_1 (default), "
+            "adobe_standard_material_v4_0, usd_preview_surface, '' (Undefined)",
+            "Legacy PBR usages are mapped automatically by OpenPBR in the 3D view",
+            "With an OpenPBR graph, outputs use OpenPBR identifiers + dual usages "
+            "(base_metalness = metalness + metallic, specular_roughness = specularRoughness + roughness)",
+        ],
+    },
+    "function_graphs": {
+        "name": "Function graphs on node parameters (build_function_graph)",
+        "description": (
+            "Function graphs compute single values per evaluation (per pixel, per shape, "
+            "per ray-march step). SD 16 uses them for Pixel/Value processors, 3D viewer "
+            "scenes and cameras, Shape splatter v2 SDF shapes / custom distributions and "
+            "mapper custom projections."
+        ),
+        "key_facts": [
+            "Targets: pixelprocessor.perpixel, valueprocessor.function, 3d_viewer.sdf_scene, "
+            "shape_splatter_v2.pattern_sdf_function / position_function, mapper.custom_function",
+            "Inputs of function nodes are connection-only — values come from const_* nodes "
+            "(build_function_graph creates them from plain numbers/lists)",
+            "Variables are read with get_* nodes: '$pos' (UV in pixel processor), 'shape.id' "
+            "(Shape splatter v2 per-shape id)",
+            "samplecol/samplelum: __constant__ = [input index, filtering] (int2)",
+            "vector2/vector4 inputs: componentsin + componentslast",
+            "Polymorphic atomic nodes (add, mul, lerp...) take their type from what is connected",
+            "SDF: Z up, signed distance output, p_input unconnected = world position P",
+            "Shape splatter v2 SDF shapes: set sdf_bounding_frame_size (Rusty bolts sample: [0.6,0.6,1])",
+        ],
+    },
     "substance_graph": {
         "name": "Substance Graph (SBS Compositing Graph)",
         "description": (
@@ -1402,7 +1573,7 @@ NODE_CATEGORIES = {
     "pattern_generators": {
         "description": "Library pattern nodes. Generate structured geometric patterns.",
         "nodes": ["polygon_2", "tile_sampler", "brick_generator_1", "tile_generator_1",
-                  "shape_splatter_1", "circle_burst_1", "weave_generator_1",
+                  "shape_splatter_1", "shape_splatter_v2", "grid_atlas_grayscale", "circle_burst_1", "weave_generator_1",
                   "scratches_generator_1", "grunge_map_001", "stains_1"],
     },
     "gradient_generators": {

@@ -85,36 +85,38 @@ Atomic Node Port Reference:
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Library node URL registry (confirmed from SD 15.0.3)
+# Library node URL registry — portable "pkg:///<graph identifier>" form.
+# The plugin resolves these against <SD>/resources/packages (SD 15 + 16);
+# "?dependency=<uid>" suffixes are session-specific and were dropped.
 # ─────────────────────────────────────────────────────────────────────────────
 LIB = {
     # Noise generators
-    "perlin_noise":           "pkg:///perlin_noise?dependency=1563156574",
-    "cells_1":                "pkg:///cells_1?dependency=1563150890",
-    "cells_2":                "pkg:///cells_2?dependency=1563253418",
-    "cells_4":                "pkg:///cells_4?dependency=1299276447",
-    "clouds_2":               "pkg:///clouds_2?dependency=1563158662",
-    "clouds_1":               "pkg:///clouds_1?dependency=1563662901",
-    "crystal_1":              "pkg:///crystal_1?dependency=1563153565",
-    "polygon_2":              "pkg:///polygon_2?dependency=1563151369",
+    "perlin_noise":           "pkg:///perlin_noise",
+    "cells_1":                "pkg:///cells_1",
+    "cells_2":                "pkg:///cells_2",
+    "cells_4":                "pkg:///cells_4",
+    "clouds_2":               "pkg:///clouds_2",
+    "clouds_1":               "pkg:///clouds_1",
+    "crystal_1":              "pkg:///crystal_1",
+    "polygon_2":              "pkg:///polygon_2",
     # Gradients
-    "gradient_linear_1":      "pkg:///gradient_linear_1?dependency=1563150839",
-    "gradient_axial":         "pkg:///gradient_axial?dependency=1563152648",
+    "gradient_linear_1":      "pkg:///gradient_linear_1",
+    "gradient_axial":         "pkg:///gradient_axial",
     # Blur / warp operators
-    "blur_hq_grayscale":      "pkg:///blur_hq_grayscale?dependency=1299236171",
-    "slope_blur_grayscale_2": "pkg:///slope_blur_grayscale_2?dependency=1563154333",
-    "non_uniform_blur_grayscale": "pkg:///non_uniform_blur_grayscale?dependency=1502209989",
-    "multi_directional_warp_grayscale": "pkg:///multi_directional_warp_grayscale?dependency=1563187562",
-    "invert_grayscale":       "pkg:///invert_grayscale?dependency=1177447620",
-    "highpass_grayscale":     "pkg:///highpass_grayscale?dependency=1563447639",
-    "histogram_scan":         "pkg:///histogram_scan?dependency=1563254078",
+    "blur_hq_grayscale":      "pkg:///blur_hq_grayscale",
+    "slope_blur_grayscale_2": "pkg:///slope_blur_grayscale_2",
+    "non_uniform_blur_grayscale": "pkg:///non_uniform_blur_grayscale",
+    "multi_directional_warp_grayscale": "pkg:///multi_directional_warp_grayscale",
+    "invert_grayscale":       "pkg:///invert_grayscale",
+    "highpass_grayscale":     "pkg:///highpass_grayscale",
+    "histogram_scan":         "pkg:///histogram_scan",
     # Structural / flood-fill chain
-    "edge_detect":            "pkg:///edge_detect?dependency=1563645680",
-    "flood_fill":             "pkg:///flood_fill?dependency=1323881949",
-    "flood_fill_to_gradient_2": "pkg:///flood_fill_to_gradient_2?dependency=1323881949",
-    "flood_fill_to_grayscale":  "pkg:///flood_fill_to_grayscale?dependency=1323881949",
+    "edge_detect":            "pkg:///edge_detect",
+    "flood_fill":             "pkg:///flood_fill",
+    "flood_fill_to_gradient_2": "pkg:///flood_fill_to_gradient_2",
+    "flood_fill_to_grayscale":  "pkg:///flood_fill_to_grayscale",
     # Tiling
-    "tile_random":            "pkg:///tile_random?dependency=1508386588",
+    "tile_random":            "pkg:///tile_random",
 }
 
 

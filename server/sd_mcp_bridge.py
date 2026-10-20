@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-sd_mcp_bridge.py - Substance Designer MCP Bridge v2.0.0
+sd_mcp_bridge.py - Substance Designer MCP Bridge v2.1.0
 
 Relay between Claude (stdio/FastMCP) and the SD plugin (TCP).
 
@@ -196,7 +196,7 @@ async def _async_send(cmd_type: str, params: dict = None) -> str:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def _lifespan(app: FastMCP):
-    logger.info(f"Substance Designer MCP Bridge v2.0.0 -> SD plugin on port {_sd_port}")
+    logger.info(f"Substance Designer MCP Bridge v2.1.0 -> SD plugin on port {_sd_port}")
     logger.info("Ensure Substance Designer is running with the MCP plugin loaded.")
     yield {}
     logger.info("Substance Designer MCP bridge shutting down.")
@@ -234,21 +234,27 @@ async def create_package(ctx: Context) -> str:
 async def create_graph(ctx: Context,
                        package_index: int = 0,
                        graph_name: str = "MCP_Graph",
-                       package_path: Optional[str] = None) -> str:
+                       package_path: Optional[str] = None,
+                       material_model: Optional[str] = None) -> str:
     """
     Create a new SBS Compositing Graph in Substance Designer.
     - package_index: which loaded package (0 = first/current)
     - graph_name: identifier for the new graph
     - package_path: optional full path to specific .sbs file
+    - material_model: SD 16+ only. None = 'openpbr_v1_1' (SD 16 default),
+      '' = leave Undefined, or any identifier from list_material_models.
 
     IMPORTANT: graph_name should use only letters, digits, underscores.
     Spaces and special characters are automatically sanitized.
     """
-    return await _async_send("create_graph", {
+    params = {
         "package_index": package_index,
         "graph_name": graph_name,
         "package_path": package_path,
-    })
+    }
+    if material_model is not None:
+        params["material_model"] = material_model
+    return await _async_send("create_graph", params)
 
 
 @mcp.tool()
@@ -363,7 +369,9 @@ async def create_instance_node(ctx: Context,
     """
     Create an instance of a library node (Cells, Perlin Noise, etc.).
     First use get_library_nodes to find the resource_url.
-    - resource_url: URL like 'pkg:///cells_1?dependency=1563150890'
+    - resource_url: library graph identifier or URL, e.g. 'clouds_2',
+      'pkg:///clouds_2' or a full 'pkg:///x?dependency=N' URL. The plugin loads
+      the current (non-legacy) library package from SD's resources on demand.
     - graph_identifier: target graph (None = current)
     - position: [x, y]
 
@@ -387,6 +395,7 @@ async def create_output_node(ctx: Context,
     """
     Create an output node with a specific PBR usage in Substance Designer.
     - usage: baseColor, normal, height, roughness, metallic, ambientOcclusion, emissive, opacity
+      (on SD 16+ the usage is written to the node so the 3D view / OpenPBR picks it up)
     - label: display label (defaults to usage name)
     - graph_identifier: target graph (None = current)
     - position: [x, y]
@@ -619,8 +628,9 @@ async def get_library_nodes(ctx: Context,
                             filter_text: str = "",
                             limit: int = 200) -> str:
     """
-    Get available library nodes from Substance Designer's built-in packages.
-    Returns resource URLs for use with create_instance_node.
+    Search Substance Designer's built-in library (<SD>/resources/packages) and
+    graphs in loaded packages. Returns portable 'pkg:///<identifier>' URLs for
+    create_instance_node / batch "resource_url" / "library_keyword".
     - filter_text: search filter (e.g. 'cell', 'perlin', 'noise', 'grunge', 'polygon')
     - limit: max results
 
@@ -680,7 +690,8 @@ async def create_batch_graph(ctx: Context,
                              connections: Optional[List[dict]] = None,
                              output_size_log2: int = 11,
                              open_in_editor: bool = True,
-                             package_path: Optional[str] = None) -> str:
+                             package_path: Optional[str] = None,
+                             material_model: Optional[str] = None) -> str:
     """
     Create a complete graph from a descriptor in ONE call. Most efficient for complex graphs.
 
@@ -691,7 +702,7 @@ async def create_batch_graph(ctx: Context,
         "position": [0, 0],              # optional
         "usage": "height",               # for output nodes only
         "label": "Height Output",        # for output nodes
-        "resource_url": "pkg:///...",    # for library nodes (use get_library_nodes first)
+        "resource_url": "pkg:///clouds_2",  # library node (identifier or URL)
         "parameters": {                  # optional parameter overrides
           "intensity": 10.0,             # shorthand (auto-detects float)
           "$outputsize": {"value": [11,11], "type": "int2"}  # explicit type
@@ -712,9 +723,12 @@ async def create_batch_graph(ctx: Context,
         (run create_instance_node + get_node_info first in test mode)
       - Batch does NOT validate library node port IDs automatically
 
+    material_model: SD 16+ only (None = OpenPBR, '' = Undefined)
+
     Returns: node_map {alias -> actual_node_id} + creation stats
     """
     return await _async_send("create_batch_graph", {
+        "material_model": material_model,
         "graph_name": graph_name,
         "package_index": package_index,
         "nodes": nodes or [],
@@ -756,23 +770,26 @@ async def build_material_graph(ctx: Context,
                                 overrides: Optional[dict] = None,
                                 output_size_log2: int = 11,
                                 open_in_editor: bool = True,
-                                package_path: Optional[str] = None) -> str:
+                                package_path: Optional[str] = None,
+                                material_model: Optional[str] = None) -> str:
     """
     Build a complete PBR material graph from a named recipe in ONE call.
 
-    Available recipes: steel, iron, copper, gold, silver, aluminum,
-    granite, marble, sandstone, limestone, slate,
-    wood, wood_oak, oak, moss, bone,
-    sand, mud, gravel, clay,
-    ice, snow, frost, water,
-    diamond, ruby, sapphire, emerald, amethyst.
+    Use list_recipes for the exact names (79 recipes), e.g. metal_steel,
+    metal_copper, rock_granite, rock_marble, wood_oak, soil_mud, brick_red,
+    tile_stone, concrete_aged, pro_concrete, pro_steel, fabric_denim, ice, snow.
 
     Each recipe generates: Height + Normal + Roughness + AO + BaseColor + Metallic outputs.
+    On SD 16 with an OpenPBR graph the outputs use the OpenPBR identifiers/usages
+    (base_color, base_metalness [metalness+metallic], specular_roughness
+    [specularRoughness+roughness], ambient_occlusion, normal, height).
 
     overrides: optional dict to override node parameters, keyed by node alias.
     output_size_log2: 10=1024, 11=2048, 12=4096
+    material_model: SD 16+ only (None = OpenPBR, '' = Undefined)
     """
     return await _async_send("build_material_graph", {
+        "material_model": material_model,
         "graph_name": graph_name,
         "recipe_name": recipe_name,
         "package_index": package_index,
@@ -793,7 +810,8 @@ async def build_heightmap_graph(ctx: Context,
                                  detail_level: int = 2,
                                  scale: float = 5.0,
                                  disorder: float = 0.5,
-                                 package_path: Optional[str] = None) -> str:
+                                 package_path: Optional[str] = None,
+                                 material_model: Optional[str] = None) -> str:
     """
     Build a heightmap-only graph for terrain/rock/cliff.
 
@@ -802,8 +820,10 @@ async def build_heightmap_graph(ctx: Context,
     detail_level: 1=basic, 2=standard, 3=high detail
     scale: overall scale factor (1.0 to 10.0)
     disorder: amount of irregularity/warping (0.0 to 1.0)
+    material_model: SD 16+ only (None = OpenPBR, '' = Undefined)
     """
     return await _async_send("build_heightmap_graph", {
+        "material_model": material_model,
         "graph_name": graph_name,
         "style": style,
         "package_index": package_index,
@@ -884,19 +904,193 @@ async def list_documentation(ctx: Context,
     })
 
 
+@mcp.tool()
+async def list_function_nodes(ctx: Context, filter_text: str = "",
+                              include_atomic: bool = True,
+                              include_library: bool = True,
+                              limit: int = 300) -> str:
+    """
+    List nodes usable inside FUNCTION graphs (pixel processor, value processor,
+    3D viewer scenes, Shape splatter v2 functions...).
+    - atomic: add, mul, lerp, ifelse, swizzle1, vector4, samplecol, samplelum,
+      const_float1..4, const_int1..4, get_float1..4 (variables), ...
+    - library: functions from SD's library (hash11, SDF functions, ...)
+    """
+    return await _async_send("list_function_nodes", {
+        "filter_text": filter_text, "include_atomic": include_atomic,
+        "include_library": include_library, "limit": limit})
+
+
+@mcp.tool()
+async def list_sdf_functions(ctx: Context, category: str = "",
+                             filter_text: str = "") -> str:
+    """
+    SD 16+: list the 3D SDF function library with input ports and types.
+    category: primitive (sphere, cube, cylinder, torus, rock, helix...),
+              operator (union, union_smooth, subtraction_smooth, intersection,
+              shell, rounding, morph, symmetry, repeat_mirror...),
+              transform (rotate, offset, scale, bend, twist, elongate, flip,
+              rotate_p, offset_p), material (set_id, set_color, set_material,
+              set_roughness, set_metalness)
+    Use 'short_name' or 'identifier' as node "type" in build_sdf_scene /
+    set_shape_splatter_sdf / build_function_graph.
+    """
+    return await _async_send("list_sdf_functions", {
+        "category": category, "filter_text": filter_text})
+
+
+@mcp.tool()
+async def build_function_graph(ctx: Context,
+                               node_id: str,
+                               param_id: str,
+                               nodes: List[dict],
+                               output: str,
+                               graph_identifier: Optional[str] = None,
+                               replace: bool = True) -> str:
+    """
+    Create (or replace) the FUNCTION graph of a node parameter in ONE call.
+
+    Typical targets (SD 16):
+      pixelprocessor.perpixel, valueprocessor.function,
+      3d_viewer.sdf_scene / camera_function / custom_output,
+      shape_splatter_v2.pattern_sdf_function / position_function /
+      pattern_custom_function, shape_splatter_mapper_*.custom_function
+
+    nodes: list of {"alias", "type", "inputs"?, "value"?, "value_type"?}
+      type  : atomic function ('add', 'mul', 'vector4', 'samplecol',
+              'const_float3', 'get_float2'...), a library function ('hash11'),
+              or an SDF short name ('sphere', 'union_smooth', 'rotate', 'set_color')
+      value : sets the node's own constant (const_*, get_* variable name,
+              samplecol/samplelum input index as [index, 0] with value_type int2)
+      inputs: {port: source}
+        "@alias"                    connect another node's output
+        {"from": "alias", "output": "port"}
+        0.3 / [0, 0, 0.3] / true    auto-creates the matching const node
+        {"value": [1, 2], "type": "int2"}   explicit constant type
+        "$pos" / {"var": "shape.id", "type": "float"}   variable getter
+    output: alias of the node that becomes the function output
+
+    Function inputs can NOT be set directly — values always go through const
+    nodes, which this tool creates for you.
+
+    Example (pixel processor, input × UV gradient):
+      nodes=[{"alias":"p","type":"get_float2","value":"$pos"},
+             {"alias":"s","type":"samplecol","value":[0,0],"value_type":"int2",
+              "inputs":{"pos":"@p"}},
+             {"alias":"g","type":"vector4","inputs":{"componentsin":"@p",
+              "componentslast":[0.0,1.0]}},
+             {"alias":"m","type":"mul","inputs":{"a":"@s","b":"@g"}}], output="m"
+    """
+    return await _async_send("build_function_graph", {
+        "node_id": node_id, "param_id": param_id, "nodes": nodes,
+        "output": output, "graph_identifier": graph_identifier,
+        "replace": replace})
+
+
+@mcp.tool()
+async def get_function_graph_info(ctx: Context, node_id: str, param_id: str,
+                                  graph_identifier: Optional[str] = None) -> str:
+    """
+    Inspect the function graph stored on a node parameter: nodes, types,
+    constants, connections and which node is the output.
+    """
+    return await _async_send("get_function_graph_info", {
+        "node_id": node_id, "param_id": param_id,
+        "graph_identifier": graph_identifier})
+
+
+@mcp.tool()
+async def build_sdf_scene(ctx: Context,
+                          nodes: List[dict],
+                          output: str,
+                          graph_name: Optional[str] = None,
+                          graph_identifier: Optional[str] = None,
+                          package_index: int = 0,
+                          outputs: Optional[List[str]] = None,
+                          viewer_params: Optional[dict] = None,
+                          output_usages: Optional[dict] = None,
+                          output_size_log2: int = 10,
+                          position: Optional[List[float]] = None,
+                          material_model: Optional[str] = None) -> str:
+    """
+    SD 16+: build a 3D SDF scene and render it with 3D viewer node(s).
+
+    nodes/output: same descriptor as build_function_graph, using SDF functions:
+      [{"alias":"base","type":"cube","inputs":{"size":[0.6,0.6,0.2],
+        "rounding":0.03,"center_position":[0,0,0.1]}},
+       {"alias":"ball","type":"sphere","inputs":{"radius":0.22,
+        "center_position":[0,0,0.3]}},
+       {"alias":"u","type":"union_smooth","inputs":{"sdf_1":"@base",
+        "sdf_2":"@ball","smoothness":0.08}},
+       {"alias":"mat","type":"set_material","inputs":{"scene":"@u",
+        "basecolor":[0.75,0.55,0.2],"metalness":1.0,"roughness":0.3}}]
+      output="mat"
+    Conventions: Z is up; each SDF outputs a signed distance (<0 inside);
+    leave p_input unconnected for world position; set_id takes an int.
+
+    graph_name: create a new graph (else use graph_identifier / current graph)
+    outputs: AOVs, one 3D viewer each: beauty (default), normal_ws, normal_ts,
+             position, distance, depth, color, material_id
+    viewer_params: extra 3D viewer parameters (bounding_frame_size,
+             enable_sdf_isolines, ray_marching_steps, background_mode, ...)
+    output_usages: optional {aov: usage}, e.g. {"color": "baseColor"}
+    """
+    return await _async_send("build_sdf_scene", {
+        "nodes": nodes, "output": output, "graph_name": graph_name,
+        "graph_identifier": graph_identifier, "package_index": package_index,
+        "outputs": outputs, "viewer_params": viewer_params,
+        "output_usages": output_usages, "output_size_log2": output_size_log2,
+        "position": position, "material_model": material_model})
+
+
+@mcp.tool()
+async def set_shape_splatter_sdf(ctx: Context,
+                                 node_id: str,
+                                 nodes: List[dict],
+                                 output: str,
+                                 graph_identifier: Optional[str] = None,
+                                 bounding_frame_size: Optional[List[float]] = None) -> str:
+    """
+    SD 16+: make a Shape splatter v2 node scatter a custom SDF shape.
+    Sets shape_type = 'SDF Function', optional sdf_bounding_frame_size [x,y,z]
+    (Adobe's Rusty bolts sample uses [0.6, 0.6, 1.0]) and builds the
+    pattern_sdf_function from the same descriptor as build_sdf_scene.
+
+    Per-shape variation: use the variable 'shape.id', e.g.
+      {"alias":"r","type":"hash11","inputs":{"p":"$shape.id"}}
+    Material IDs (set_id) and colors (set_color/set_material) come out of the
+    splatter's sdf_color / sdf_roughness / sdf_metalness outputs and drive the
+    Shape splatter v2 mapper / to-mask nodes.
+    """
+    return await _async_send("set_shape_splatter_sdf", {
+        "node_id": node_id, "nodes": nodes, "output": output,
+        "graph_identifier": graph_identifier,
+        "bounding_frame_size": bounding_frame_size})
+
+
+@mcp.tool()
+async def list_material_models(ctx: Context) -> str:
+    """
+    SD 16+: list the material models a graph can use (OpenPBR v1.1, Adobe
+    Standard Material v4.0, USD Preview Surface, Undefined). Pass the
+    identifier as material_model to create_graph / build_material_graph.
+    """
+    return await _async_send("list_material_models")
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
     global _sd_port
 
-    parser = argparse.ArgumentParser(description="Substance Designer MCP Bridge v2.0.0")
+    parser = argparse.ArgumentParser(description="Substance Designer MCP Bridge v2.1.0")
     parser.add_argument("--port", type=int, default=9881,  # BUG-B03 fix: default is 9881
                         help="TCP port to connect to the SD plugin (default: 9881)")
     args = parser.parse_args()
     _sd_port = args.port
 
-    logger.info(f"SD MCP Bridge v2.0.0 -> SD plugin on port {_sd_port}")
+    logger.info(f"SD MCP Bridge v2.1.0 -> SD plugin on port {_sd_port}")
     mcp.run()
 
 

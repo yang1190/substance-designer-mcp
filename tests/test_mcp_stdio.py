@@ -9,7 +9,7 @@ def test_mcp_tool_call():
 
     # Start the bridge process
     cmd = [
-        "uv", "run", "python", "sd_mcp_bridge.py", "--port", "9880"
+        "uv", "run", "python", "sd_mcp_bridge.py", "--port", "9881"
     ]
 
     print("Starting MCP bridge...")

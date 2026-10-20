@@ -31,7 +31,7 @@ CRITICAL RULES - DO NOT VIOLATE
 ═══════════════════════════════════════════════════════════════════════════════
   - ONE CALL AT A TIME. NEVER parallel. NEVER batch from outside.
   - newNode(unknown_def) HANGS SD 15 permanently
-  - SDUsage.sNew() HANGS SD 15 permanently
+  - SDUsage.sNew() HANGS SD 15 permanently (works on SD 16.0.5 — usages only set on SD 16+)
   - arrange_nodes() DESTROYS ALL connections
   - Library node outputs are NEVER "unique_filter_output"
   - directionalwarp warp map port = "inputintensity" (NOT inputgradient)
@@ -52,6 +52,10 @@ VERSION HISTORY
   3.1.0 - SD crash fixes (SDValueInt2 on float, SDValueFloat on enum), build_heightmap bug fix
   3.2.x - Reporting bug fix (library node definition field), recipes v5.0 (78 recipes, JP architecture)
   3.3.0 - list_documentation tool: embedded knowledge base for all SD nodes, ports, params, workflows
+  3.4.0 - SD 16.0.x support (Python 3.13 / Qt 6.8): library nodes resolved from resources/packages
+          (non-legacy versions), output usages + OpenPBR material model, list_material_models
+  3.5.0 - Function graphs on parameters (pixel processor, 3D viewer, Shape splatter v2),
+          SDF scenes, OpenPBR output identifiers/usages, folder-stored library graphs
 """
 
 import sd
@@ -72,6 +76,19 @@ from contextlib import redirect_stdout, redirect_stderr
 
 # ── SD API imports ───────────────────────────────────────────────────────────
 from sd.api.sdproperty import SDPropertyCategory
+try:
+    # SD API errors derive from BaseException, NOT Exception: a bare
+    # "except Exception" lets them escape, and the dispatcher used to turn them
+    # into an empty "{}" result. Always catch SDError instead.
+    from sd.api.apiexception import APIException
+except Exception:  # pragma: no cover
+    class APIException(Exception):
+        pass
+SDError = (Exception, APIException)
+try:
+    from sd.api.sdproperty import SDPropertyInheritanceMethod
+except SDError:  # pragma: no cover
+    SDPropertyInheritanceMethod = None
 from sd.api.sdbasetypes import float2, float3, float4, ColorRGBA, int2, int3, int4
 from sd.api.sdvaluefloat   import SDValueFloat
 from sd.api.sdvalueint     import SDValueInt
@@ -85,10 +102,18 @@ from sd.api.sdvaluefloat3  import SDValueFloat3
 from sd.api.sdvaluefloat4  import SDValueFloat4
 from sd.api.sdvaluecolorrgba import SDValueColorRGBA
 from sd.api.sbs.sdsbscompgraph import SDSBSCompGraph
+from .function_graphs import FunctionGraphMixin
+try:  # output usages (baseColor, normal, ...) — confirmed working on SD 16.0.5
+    from sd.api.sdusage      import SDUsage
+    from sd.api.sdvalueusage import SDValueUsage
+    from sd.api.sdvaluearray import SDValueArray
+    from sd.api.sdtypeusage  import SDTypeUsage
+except SDError:  # pragma: no cover
+    SDUsage = SDValueUsage = SDValueArray = SDTypeUsage = None
 
 # ── Configuration ────────────────────────────────────────────────────────────
 DEFAULT_PORTS     = [9881]
-PLUGIN_VERSION    = (3, 3, 0)
+PLUGIN_VERSION    = (3, 5, 0)
 HEADER_SIZE       = 4
 COMMAND_TIMEOUT   = 120
 CLIENT_TIMEOUT    = 130
@@ -230,7 +255,7 @@ def _inject_sd_pyside_path():
                 exe = proc.info.get('exe') or ''
                 if exe:
                     candidates.append(os.path.dirname(exe))
-    except Exception:
+    except SDError:
         pass
 
     try:
@@ -241,7 +266,7 @@ def _inject_sd_pyside_path():
                 candidates.append(exe_dir)
                 break
             exe_dir = os.path.dirname(exe_dir)
-    except Exception:
+    except SDError:
         pass
 
     try:
@@ -256,7 +281,7 @@ def _inject_sd_pyside_path():
                 for item in os.listdir(base):
                     if 'substance' in item.lower() and 'designer' in item.lower():
                         candidates.append(os.path.join(base, item))
-    except Exception:
+    except SDError:
         pass
 
     for sd_root in candidates:
@@ -268,7 +293,15 @@ def _inject_sd_pyside_path():
     return None
 
 
-_pyside_path = _inject_sd_pyside_path()
+def _pyside6_importable():
+    try:
+        import PySide6.QtCore  # noqa: F401  (SD 16 ships it on sys.path)
+        return True
+    except SDError:
+        return False
+
+
+_pyside_path = None if _pyside6_importable() else _inject_sd_pyside_path()
 
 _QTimer = None
 _QT_BINDING_USED = None
@@ -278,7 +311,7 @@ for _qt_binding in ("PySide6.QtCore", "PySide2.QtCore"):
         _QTimer = _qtcore_mod.QTimer
         _QT_BINDING_USED = _qt_binding
         break
-    except Exception:
+    except SDError:
         pass
 
 
@@ -317,11 +350,11 @@ class _Invoker:
                         fn()
                     except queue.Empty:
                         pass
-                    except Exception as e:
+                    except SDError as e:
                         _log("Invoker._execute error: {}".format(e))
 
             return Invoker()
-        except Exception as e:
+        except SDError as e:
             _log("Warning: _Invoker build failed: {}".format(e))
             return None
 
@@ -331,8 +364,9 @@ class MainThreadDispatcher:
         if threading.current_thread() is threading.main_thread():
             try:
                 return fn(*args, **kwargs), None
-            except Exception as e:
-                return None, e
+            except SDError as e:
+                return None, (e if isinstance(e, Exception) else
+                              RuntimeError("SD API error ({}): {}".format(type(e).__name__, e)))
 
         invoker = _Invoker.instance()
         if invoker is None:
@@ -347,8 +381,9 @@ class MainThreadDispatcher:
         def _call():
             try:
                 result_holder[0] = fn(*args, **kwargs)
-            except Exception as e:
-                result_holder[1] = e
+            except SDError as e:
+                result_holder[1] = e if isinstance(e, Exception) else \
+                    RuntimeError("SD API error ({}): {}".format(type(e).__name__, e))
             finally:
                 done.set()
 
@@ -426,7 +461,7 @@ class SDMCPServer:
                 sock.setblocking(False)
                 self.listeners[port] = sock
                 _log("Listening on {}:{}".format(self.host, port))
-            except Exception as e:
+            except SDError as e:
                 _log("Failed to bind port {}: {}".format(port, e))
 
         if not self.listeners:
@@ -444,7 +479,7 @@ class SDMCPServer:
         for sock in self.listeners.values():
             try:
                 sock.close()
-            except Exception:
+            except SDError:
                 pass
         self.listeners.clear()
         _log("Server stopped")
@@ -473,7 +508,7 @@ class SDMCPServer:
                     continue
                 try:
                     self._handle_client(client, addr, port)
-                except Exception as e:
+                except SDError as e:
                     _log("Unexpected error: {}".format(e))
 
     def _handle_client(self, client, addr, port):
@@ -501,12 +536,12 @@ class SDMCPServer:
             _log("Timeout from client on port {}".format(port))
         except ConnectionResetError:
             pass
-        except Exception as e:
+        except SDError as e:
             _log("Error handling client on port {}: {}".format(port, e))
         finally:
             try:
                 client.close()
-            except Exception:
+            except SDError:
                 pass
 
     def _execute_safe(self, command):
@@ -517,11 +552,11 @@ class SDMCPServer:
             result = _run_on_main(self._handler.dispatch, cmd_type, params)
             _log("Done: {}".format(cmd_type))
             return {"status": "success", "result": result if result is not None else {}}
-        except Exception as e:
+        except SDError as e:
             _log("Error in {}: {}".format(command.get("type", "?"), e))
             try:
                 traceback.print_exc()
-            except Exception:
+            except SDError:
                 pass
             return {"status": "error", "message": str(e)}
 
@@ -608,6 +643,109 @@ def _coerce_type(inferred_type, value, sd_type_id):
     return inferred_type
 
 
+def _sd_version_tuple():
+    """(major, minor, patch) of the running Substance Designer, (0,0,0) if unknown."""
+    try:
+        v = sd.getContext().getSDApplication().getVersion()
+        parts = [int(x) for x in re.findall(r"\d+", str(v))[:3]]
+        return tuple(parts + [0] * (3 - len(parts)))
+    except SDError:
+        return (0, 0, 0)
+
+
+def _sd_major():
+    return _sd_version_tuple()[0]
+
+
+# Standard PBR output usages: name -> (components, color space)
+# Legacy PBR output usages (Adobe Standard Material / metallic-roughness):
+#   key -> (identifier, usage name). SD's own templates use components RGBA and
+#   an empty color space for every usage, so we do the same.
+OUTPUT_USAGES = {
+    "basecolor":        ("basecolor",        "baseColor"),
+    "diffuse":          ("diffuse",          "diffuse"),
+    "normal":           ("normal",           "normal"),
+    "roughness":        ("roughness",        "roughness"),
+    "metallic":         ("metallic",         "metallic"),
+    "height":           ("height",           "height"),
+    "ambientocclusion": ("ambientocclusion", "ambientOcclusion"),
+    "ao":               ("ambientocclusion", "ambientOcclusion"),
+    "emissive":         ("emissive",         "emissive"),
+    "opacity":          ("opacity",          "opacity"),
+    "specular":         ("specular",         "specular"),
+    "specularlevel":    ("specularlevel",    "specularLevel"),
+    "glossiness":       ("glossiness",       "glossiness"),
+    "anisotropylevel":  ("anisotropylevel",  "anisotropyLevel"),
+    "anisotropyangle":  ("anisotropyangle",  "anisotropyAngle"),
+    "ior":              ("ior",              "IOR"),
+}
+
+# OpenPBR outputs exactly as in SD 16's 01_01_openpbr_metalness_roughness.sbs
+# ("complete" graph): identifier -> [usages] (OpenPBR name first, legacy alias second)
+OPENPBR_OUTPUTS = [
+    ("base_weight",                         ["baseWeight"]),
+    ("base_color",                          ["baseColor"]),
+    ("base_metalness",                      ["metalness", "metallic"]),
+    ("base_diffuse_roughness",              ["baseDiffuseRoughness"]),
+    ("specular_weight",                     ["specularWeight"]),
+    ("specular_color",                      ["specularColor", "specularEdgeColor"]),
+    ("specular_roughness",                  ["specularRoughness", "roughness"]),
+    ("specular_roughness_anisotropy",       ["specularRoughnessAnisotropy", "anisotropyLevel"]),
+    ("specular_ior",                        ["specularIOR", "IOR"]),
+    ("transmission_weight",                 ["transmissionWeight"]),
+    ("transmission_color",                  ["transmissionColor", "absorptionColor"]),
+    ("transmission_depth",                  ["transmissionDepth", "absorptionDistance"]),
+    ("transmission_scatter",                ["transmissionScatter"]),
+    ("transmission_scatter_anisotropy",     ["transmissionScatterAnisotropy"]),
+    ("transmission_dispersion_scale",       ["transmissionDispersionScale"]),
+    ("transmission_dispersion_abbe_number", ["transmissionDispersionAbbeNumber"]),
+    ("subsurface_weight",                   ["subsurfaceWeight", "translucency"]),
+    ("subsurface_color",                    ["subsurfaceColor", "scatteringColor"]),
+    ("subsurface_radius",                   ["subsurfaceRadius", "scatteringDistance"]),
+    ("subsurface_radius_scale",             ["subsurfaceRadiusScale", "scatteringDistanceScale"]),
+    ("subsurface_scatter_anisotropy",       ["subsurfaceScatterAnisotropy"]),
+    ("coat_weight",                         ["coatWeight", "coatOpacity"]),
+    ("coat_color",                          ["coatColor"]),
+    ("coat_roughness",                      ["coatRoughness"]),
+    ("coat_roughness_anisotropy",           ["coatRoughnessAnisotropy"]),
+    ("coat_ior",                            ["coatIOR"]),
+    ("coat_darkening",                      ["coatDarkening"]),
+    ("fuzz_weight",                         ["fuzzWeight", "sheenOpacity"]),
+    ("fuzz_color",                          ["fuzzColor", "sheenColor"]),
+    ("fuzz_roughness",                      ["fuzzRoughness", "sheenRoughness"]),
+    ("emission_luminance",                  ["emissionLuminance"]),
+    ("emission_color",                      ["emissionColor", "emissive"]),
+    ("thin_film_weight",                    ["thinFilmWeight"]),
+    ("thin_film_thickness",                 ["thinFilmThickness"]),
+    ("thin_film_ior",                       ["thinFilmIOR"]),
+    ("opacity",                             ["opacity"]),
+    ("thin_walled",                         ["thinWalled"]),
+    ("height",                              ["height"]),
+    ("normal",                              ["normal"]),
+    ("tangent",                             ["tangent"]),
+    ("coat_normal",                         ["coatNormal"]),
+    ("coat_tangent",                        ["coatTangent"]),
+    ("ambient_occlusion",                   ["ambientOcclusion"]),
+]
+
+
+def _usage_key(s):
+    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+
+
+# any usage name / identifier (OpenPBR or legacy) -> OpenPBR identifier
+OPENPBR_ALIAS = {}
+for _ident, _usages in OPENPBR_OUTPUTS:
+    OPENPBR_ALIAS[_usage_key(_ident)] = _ident
+    for _u in _usages:
+        OPENPBR_ALIAS.setdefault(_usage_key(_u), _ident)
+OPENPBR_ALIAS.update({"ao": "ambient_occlusion", "diffuse": "base_color",
+                      "albedo": "base_color", "emissive": "emission_color"})
+OPENPBR_USAGES = dict(OPENPBR_OUTPUTS)
+
+DEFAULT_MATERIAL_MODEL_SD16 = "openpbr_v1_1"
+
+
 def _sanitize_identifier(name):
     if not name:
         return "MCP_Graph"
@@ -620,7 +758,7 @@ def _sanitize_identifier(name):
 # ════════════════════════════════════════════════════════════════════════════
 # COMMAND HANDLER — the brain of the plugin
 # ════════════════════════════════════════════════════════════════════════════
-class CommandHandler:
+class CommandHandler(FunctionGraphMixin):
 
     def __init__(self):
         self.HANDLERS = {
@@ -664,9 +802,19 @@ class CommandHandler:
             "execute_code":           self.execute_code,
             # ── Documentation ──
             "list_documentation":     self.list_documentation,
+            "list_material_models":   self.list_material_models,
+            # ── Function graphs / SDF (SD 16+) ──
+            "list_function_nodes":     self.list_function_nodes,
+            "list_sdf_functions":      self.list_sdf_functions,
+            "build_function_graph":    self.build_function_graph,
+            "get_function_graph_info": self.get_function_graph_info,
+            "build_sdf_scene":         self.build_sdf_scene,
+            "set_shape_splatter_sdf":  self.set_shape_splatter_sdf,
         }
         # Library node URL cache (populated lazily, session-lifetime)
-        self._lib_url_cache = {}  # lower-case identifier -> url string
+        self._lib_url_cache = {}  # lower-case keyword -> exact library identifier
+        self._lib_file_index = None  # identifier -> [.sbs paths], built lazily
+        self._lib_hidden = set()     # {(identifier, path)} marked hideInLibrary
 
     def dispatch(self, cmd_type, params):
         handler = self.HANDLERS.get(cmd_type)
@@ -691,8 +839,125 @@ class CommandHandler:
     def _get_sd_version(self):
         try:
             return self._app().getVersion()
-        except Exception:
+        except SDError:
             return "unknown"
+
+    # ── SD 16: output usages & material model ───────────────────────────
+    def _usages_supported(self):
+        # SDUsage.sNew() was reported to hang SD 15.0.3; verified OK on 16.0.5.
+        if SDUsage is None:
+            return False
+        if os.environ.get("SD_MCP_FORCE_USAGES") == "1":
+            return True
+        return _sd_major() >= 16
+
+    @staticmethod
+    def _graph_material_model(graph):
+        try:
+            v = graph.getAnnotationPropertyValueFromId("material_model")
+            return v.get() if v is not None else ""
+        except SDError:
+            return ""
+
+    @staticmethod
+    def _unique_output_identifier(graph, ident, node):
+        taken = set()
+        try:
+            for n in graph.getNodes():
+                if n.getIdentifier() == node.getIdentifier():
+                    continue
+                if n.getDefinition().getId() == "sbs::compositing::output":
+                    v = n.getAnnotationPropertyValueFromId("identifier")
+                    if v is not None:
+                        taken.add(v.get())
+        except SDError:
+            pass
+        if ident not in taken:
+            return ident
+        i = 1
+        while "{}_{}".format(ident, i) in taken:
+            i += 1
+        return "{}_{}".format(ident, i)
+
+    def _apply_output_usage(self, node, usage, graph=None):
+        """Set the output node's usage(s) and identifier so the 3D view and the
+        graph's material model pick it up. With an OpenPBR graph the output gets
+        the OpenPBR identifier and usages (+ legacy alias), exactly like SD 16's
+        OpenPBR template; otherwise the legacy metallic/roughness usage.
+        Returns the list of usage names that were set, or None."""
+        if not usage or not self._usages_supported():
+            return None
+        key = _usage_key(usage)
+        model = self._graph_material_model(graph) if graph is not None else ""
+        if model.startswith("openpbr") and key in OPENPBR_ALIAS:
+            ident = OPENPBR_ALIAS[key]
+            names = OPENPBR_USAGES[ident]
+        elif key in OUTPUT_USAGES:
+            ident, name = OUTPUT_USAGES[key]
+            names = [name]
+        else:
+            ident, names = _sanitize_identifier(usage).lower(), [usage]
+        try:
+            arr = SDValueArray.sNew(SDTypeUsage.sNew(), 0)
+            for name in names:
+                arr.pushBack(SDValueUsage.sNew(SDUsage.sNew(name, "RGBA", "")))
+            node.setAnnotationPropertyValueFromId("usages", arr)
+        except SDError as e:
+            _log("Warning: could not set usage '{}': {}".format(usage, e))
+            return None
+        try:
+            if graph is not None:
+                ident = self._unique_output_identifier(graph, ident, node)
+            node.setAnnotationPropertyValueFromId("identifier", SDValueString.sNew(ident))
+        except SDError:
+            pass
+        return names
+
+    def _new_output_node(self, graph, usage=None, label=None):
+        node = graph.newNode("sbs::compositing::output")
+        if not node:
+            return None
+        try:
+            node.setAnnotationPropertyValueFromId(
+                "label", SDValueString.sNew(label or usage or "output"))
+        except SDError:
+            pass
+        self._apply_output_usage(node, usage, graph)
+        return node
+
+    def _apply_material_model(self, graph, material_model=None):
+        """material_model: None = SD default for this version ('openpbr_v1_1' on
+        SD 16+), '' = leave Undefined, or an identifier from list_material_models."""
+        if _sd_major() < 16:
+            return None
+        if material_model is None:
+            material_model = DEFAULT_MATERIAL_MODEL_SD16
+        if not material_model:
+            return ""
+        try:
+            graph.setAnnotationPropertyValueFromId(
+                "material_model", SDValueString.sNew(material_model))
+            return material_model
+        except SDError as e:
+            _log("Warning: could not set material model '{}': {}".format(material_model, e))
+            return None
+
+    def list_material_models(self):
+        """SD 16+: material models available for graphs (OpenPBR, ASM, USD...)."""
+        try:
+            from sd.api.sdmaterialmodeldescription import SDMaterialModelDescription
+        except SDError:
+            return {"supported": False, "sd_version": self._get_sd_version(),
+                    "models": []}
+        models = []
+        for m in SDMaterialModelDescription.sGetAllMaterialModelDescriptions():
+            try:
+                models.append({"identifier": m.getIdentifier().get(),
+                               "label": m.getLabel().get()})
+            except SDError:
+                pass
+        return {"supported": True, "default": DEFAULT_MATERIAL_MODEL_SD16,
+                "models": models}
 
     def _resolve_package(self, package_index=0, package_path=None):
         pkgs = list(self._pkg_mgr().getUserPackages())
@@ -717,7 +982,7 @@ class CommandHandler:
                     try:
                         if res.getIdentifier() == graph_identifier:
                             return res
-                    except Exception:
+                    except SDError:
                         continue
             raise ValueError("Graph '{}' not found.".format(graph_identifier))
 
@@ -725,7 +990,7 @@ class CommandHandler:
             g = self._ui_mgr().getCurrentGraph()
             if g is not None:
                 return g
-        except Exception:
+        except SDError:
             pass
 
         for pkg in list(self._pkg_mgr().getUserPackages()):
@@ -733,7 +998,7 @@ class CommandHandler:
                 try:
                     if "SDSBSCompGraph" in res.getClassName():
                         return res
-                except Exception:
+                except SDError:
                     continue
         raise ValueError(
             "No graph available. Open a package/graph in SD, or pass graph_identifier.")
@@ -743,7 +1008,7 @@ class CommandHandler:
             n = graph.getNodeFromId(node_id)
             if n is not None:
                 return n
-        except Exception:
+        except SDError:
             pass
         for node in list(graph.getNodes()):
             if node.getIdentifier() == node_id:
@@ -756,7 +1021,7 @@ class CommandHandler:
             defn = node.getDefinition()
             if defn is not None:
                 return defn.getId()
-        except Exception:
+        except SDError:
             pass
         return "unknown"
 
@@ -770,7 +1035,7 @@ class CommandHandler:
         try:
             p = node.getPosition()
             return [p.x, p.y]
-        except Exception:
+        except SDError:
             return [0.0, 0.0]
 
     def _make_sd_value(self, value_type, value):
@@ -811,70 +1076,232 @@ class CommandHandler:
             "Unknown value_type '{}'. Valid: float, int, bool, string, "
             "float2, float3, float4, color, int2, int3, int4".format(value_type))
 
-    def _resolve_lib_url(self, keyword):
-        """Find a library node URL by keyword (case-insensitive). Cached."""
-        key = keyword.lower()
+    # ── Library node resolution (SD 15 + SD 16) ─────────────────────────
+    # Library graphs live in <SD>/resources/packages/*.sbs and are only loaded
+    # into the package manager when something depends on them. "pkg:///x?dependency=N"
+    # URLs are package-relative and the dependency UID is NOT stable across
+    # sessions/versions, so the plugin resolves library nodes by graph identifier:
+    #   1. exact URL in an already-loaded package
+    #   2. identifier in an already-loaded package
+    #   3. identifier -> .sbs file via an on-disk index, loaded on demand
+
+    @staticmethod
+    def _lib_identifier_from_ref(ref):
+        ref = (ref or "").strip()
+        if ref.startswith("pkg:///"):
+            ref = ref[len("pkg:///"):]
+        return ref.split("?", 1)[0].strip("/")
+
+    def _lib_packages_dirs(self):
+        dirs = []
+        try:
+            from sd.api.sdapplication import SDApplicationPath
+            rd = self._app().getPath(SDApplicationPath.DefaultResourcesDir)
+            if rd:
+                dirs.append(os.path.join(rd, "packages"))
+        except SDError as e:
+            _log("Warning: cannot read resources dir: {}".format(e))
+        return [d for d in dirs if os.path.isdir(d)]
+
+    _LIB_GRAPH_RE = re.compile(rb'<graph>\s*<identifier v="([^"]+)"')
+
+    def _lib_index(self):
+        """identifier -> sorted list of absolute .sbs paths (built once per session)."""
+        if self._lib_file_index is not None:
+            return self._lib_file_index
+        index, hidden_set = {}, set()
+        for d in self._lib_packages_dirs():
+            try:
+                names = os.listdir(d)
+            except SDError:
+                continue
+            for fn in names:
+                if not fn.lower().endswith(".sbs"):
+                    continue
+                fp = os.path.join(d, fn).replace("\\", "/")
+                try:
+                    with open(fp, "rb") as fh:
+                        data = fh.read()
+                except SDError:
+                    continue
+                matches = list(self._LIB_GRAPH_RE.finditer(data))
+                for i, m in enumerate(matches):
+                    try:
+                        ident = m.group(1).decode("utf-8")
+                    except SDError:
+                        continue
+                    end = matches[i + 1].start() if i + 1 < len(matches) else len(data)
+                    a_end = data.find(b"</attributes>", m.end(), end)
+                    hidden = a_end >= 0 and \
+                        data.find(b'<hideInLibrary v="1"/>', m.end(), a_end) >= 0
+                    index.setdefault(ident, []).append(fp)
+                    if hidden:
+                        hidden_set.add((ident, fp))
+        self._lib_file_index = index
+        self._lib_hidden = hidden_set
+        _log("Library index: {} graphs".format(len(index)))
+        return index
+
+    def _rank_lib_file(self, identifier, path):
+        """Lower is better. The same identifier often exists in several files,
+        e.g. clouds_2 in clouds_2.sbs (Legacy, hidden, output 'Clouds_2'),
+        noise_clouds_2.sbs (hidden) and noise_clouds_2_v2.sbs (current, output
+        'output'). Prefer the version SD shows in its Library (no hideInLibrary),
+        then a file named after the identifier, then the newest '_vN'."""
+        stem = os.path.splitext(os.path.basename(path))[0].lower()
+        ident = identifier.lower()
+        hidden = (identifier, path) in self._lib_hidden
+        if stem == ident or stem.endswith("_" + ident) or \
+                re.sub(r"_v\d+$", "", stem).endswith(ident):
+            name_score = 0
+        elif ident.startswith(stem):
+            name_score = 1
+        else:
+            name_score = 2
+        m = re.search(r"_v(\d+)$", stem)
+        ver = int(m.group(1)) if m else 1
+        return (1 if hidden else 0, name_score, -ver, len(stem), stem)
+
+    def _resolve_lib_identifier(self, keyword):
+        """Map a keyword / identifier / pkg URL to an exact library graph identifier."""
+        ident = self._lib_identifier_from_ref(keyword)
+        key = ident.lower()
         if key in self._lib_url_cache:
             return self._lib_url_cache[key]
-        for pkg in list(self._pkg_mgr().getPackages()):
-            try:
-                fp = pkg.getFilePath()
-                if not fp:
-                    continue
-                for recursive in (True, False):
-                    try:
-                        children = list(pkg.getChildrenResources(recursive))
-                        if not children:
-                            continue
-                        for res in children:
-                            try:
-                                if "SDSBSCompGraph" not in res.getClassName():
-                                    continue
-                                rid = res.getIdentifier()
-                                if key in rid.lower():
-                                    url = None
-                                    try:
-                                        url = res.getUrl()
-                                    except Exception:
-                                        pass
-                                    if url:
-                                        self._lib_url_cache[key] = url
-                                        # also cache by exact identifier
-                                        self._lib_url_cache[rid.lower()] = url
-                                        return url
-                            except Exception:
-                                pass
-                        break
-                    except Exception:
-                        continue
-            except Exception:
-                pass
+        index = self._lib_index()
+        by_lower = {}
+        for k in index:
+            by_lower.setdefault(k.lower(), k)
+        found = by_lower.get(key)
+        if not found:
+            cands = [k for k in by_lower if k.startswith(key)] or \
+                    [k for k in by_lower if key in k]
+            if cands:
+                cands.sort(key=lambda k: (len(k), k))
+                found = by_lower[cands[0]]
+        if not found:
+            # graphs inside packages that are already loaded (user packages etc.)
+            for pkg in list(self._pkg_mgr().getPackages()):
+                try:
+                    for res in pkg.getChildrenResources(True):
+                        if "SDSBSCompGraph" in res.getClassName() and \
+                                key in res.getIdentifier().lower():
+                            found = res.getIdentifier()
+                            break
+                except SDError:
+                    pass
+                if found:
+                    break
+        if found:
+            self._lib_url_cache[key] = found
+        return found
+
+    @staticmethod
+    def _find_graph_in_package(pkg, ident):
+        """Find a compositing graph by identifier, including graphs stored in
+        package folders (e.g. constant_values.sbs -> pkg:///float/constant_float),
+        which findResourceFromUrl(identifier) does not resolve."""
+        try:
+            r = pkg.findResourceFromUrl(ident)
+            if r is not None and "SDSBSCompGraph" in r.getClassName():
+                return r
+        except SDError:
+            pass
+        try:
+            for r in pkg.getChildrenResources(True):
+                if r.getIdentifier() == ident and "SDSBSCompGraph" in r.getClassName():
+                    return r
+        except SDError:
+            pass
         return None
 
-    def _create_library_node(self, graph, keyword, position=None):
-        """Create a library node from a keyword, auto-resolving URL."""
-        url = self._resolve_lib_url(keyword)
-        if not url:
+    def _get_library_resource(self, ref):
+        """Return (resource, temp_package_or_None). Caller should pass the temp
+        package to _release_temp_lib_package() after instancing."""
+        pkg_mgr = self._pkg_mgr()
+        loaded = list(pkg_mgr.getPackages())
+        # 1. exact URL (works when the dependency UID is valid in this session)
+        if ref and ref.startswith("pkg:///"):
+            for p in loaded:
+                try:
+                    r = p.findResourceFromUrl(ref)
+                    if r is not None:
+                        return r, None
+                except SDError:
+                    pass
+        ident = self._resolve_lib_identifier(ref)
+        if not ident:
+            return None, None
+        files = sorted(self._lib_index().get(ident, []),
+                       key=lambda f: self._rank_lib_file(ident, f))
+        # 2. identifier inside an already-loaded package. For built-in library
+        #    graphs only accept the preferred file: a hidden Legacy copy may
+        #    already be loaded as a dependency and has different port names.
+        best = files[0].lower() if files else None
+        for p in loaded:
+            try:
+                if best and (p.getFilePath() or "").replace("\\", "/").lower() != best:
+                    continue
+                r = self._find_graph_in_package(p, ident)
+                if r is not None:
+                    return r, None
+            except SDError:
+                pass
+        # 3. load the library package on demand
+        for fp in files:
+            try:
+                was_user = any((u.getFilePath() or "").replace("\\", "/").lower() == fp.lower()
+                               for u in pkg_mgr.getUserPackages())
+            except SDError:
+                was_user = False
+            try:
+                pkg = pkg_mgr.loadUserPackage(fp)
+            except SDError as e:
+                _log("Warning: loadUserPackage({}) failed: {}".format(fp, e))
+                continue
+            if pkg is None:
+                continue
+            r = self._find_graph_in_package(pkg, ident)
+            if r is not None:
+                return r, (None if was_user else pkg)
+            if not was_user:
+                self._release_temp_lib_package(pkg)
+        return None, None
+
+    def _release_temp_lib_package(self, pkg):
+        """Unload a library package we loaded as a *user* package. If a graph now
+        depends on it, SD keeps it loaded as a hidden dependency."""
+        if pkg is None:
+            return
+        try:
+            self._pkg_mgr().unloadUserPackage(pkg)
+        except SDError as e:
+            _log("Warning: unloadUserPackage failed: {}".format(e))
+
+    def _new_library_node(self, graph, ref, position=None):
+        resource, temp_pkg = self._get_library_resource(ref)
+        if resource is None:
             raise ValueError(
                 "Library node '{}' not found. "
-                "Use get_library_nodes(filter_text='{}') to verify.".format(keyword, keyword))
-        resource = None
-        for pkg in list(self._pkg_mgr().getPackages()):
-            try:
-                r = pkg.findResourceFromUrl(url)
-                if r is not None:
-                    resource = r
-                    break
-            except Exception:
-                pass
-        if not resource:
-            raise ValueError("Resource URL not found: {}".format(url))
-        node = graph.newInstanceNode(resource)
+                "Use get_library_nodes(filter_text=...) to search.".format(ref))
+        try:
+            node = graph.newInstanceNode(resource)
+        finally:
+            self._release_temp_lib_package(temp_pkg)
         if not node:
-            raise RuntimeError("newInstanceNode failed for '{}'.".format(url))
+            raise RuntimeError("newInstanceNode failed for '{}'.".format(ref))
         if position and len(position) >= 2:
             node.setPosition(float2(float(position[0]), float(position[1])))
         return node
+
+    def _resolve_lib_url(self, keyword):
+        """Backward-compatible: returns a portable 'pkg:///<identifier>' URL."""
+        ident = self._resolve_lib_identifier(keyword)
+        return "pkg:///{}".format(ident) if ident else None
+
+    def _create_library_node(self, graph, keyword, position=None):
+        """Create a library node from a keyword / identifier / pkg URL."""
+        return self._new_library_node(graph, keyword, position)
 
     def _set_node_params(self, node, params):
         """Apply parameter dict to a node. Type-safe: reads actual SD property type
@@ -892,9 +1319,9 @@ class CommandHandler:
                 try:
                     t = p.getType()
                     input_type_map[pid] = t.getId() if t else ""
-                except Exception:
+                except SDError:
                     input_type_map[pid] = ""
-        except Exception:
+        except SDError:
             pass
         try:
             for p in list(node.getProperties(SDPropertyCategory.Annotation)):
@@ -902,9 +1329,9 @@ class CommandHandler:
                 try:
                     t = p.getType()
                     annot_type_map[pid] = t.getId() if t else ""
-                except Exception:
+                except SDError:
                     annot_type_map[pid] = ""
-        except Exception:
+        except SDError:
             pass
 
         for param_id, param_spec in params.items():
@@ -931,16 +1358,16 @@ class CommandHandler:
                     try:
                         node.setInputPropertyValueFromId(param_id, sd_val)
                         set_ok = True
-                    except Exception:
+                    except SDError:
                         pass
                 if not set_ok and param_id in annot_type_map:
                     try:
                         node.setAnnotationPropertyValueFromId(param_id, sd_val)
                         set_ok = True
-                    except Exception:
+                    except SDError:
                         pass
                 results[param_id] = "ok" if set_ok else "skipped"
-            except Exception as e:
+            except SDError as e:
                 results[param_id] = "error: {}".format(e)
         return results
 
@@ -951,14 +1378,14 @@ class CommandHandler:
         try:
             for p in list(from_node.getProperties(SDPropertyCategory.Output)):
                 out_ids.add(p.getId())
-        except Exception:
+        except SDError:
             pass
         try:
             for p in list(to_node.getProperties(SDPropertyCategory.Input)):
                 pid = p.getId()
                 if pid not in _SYSTEM_PARAMS:
                     in_ids.add(pid)
-        except Exception:
+        except SDError:
             pass
 
         if out_ids and from_out not in out_ids:
@@ -987,7 +1414,7 @@ class CommandHandler:
         try:
             current_graph = self._ui_mgr().getCurrentGraph()
             current_graph_id = current_graph.getIdentifier() if current_graph else None
-        except Exception:
+        except SDError:
             current_graph = None
             current_graph_id = None
 
@@ -1003,20 +1430,20 @@ class CommandHandler:
                         if "CompGraph" in cname or "SDGraph" in cname:
                             try:
                                 nc = len(list(res.getNodes()))
-                            except Exception:
+                            except SDError:
                                 pass
                         graphs.append({"identifier": rid, "type": cname, "node_count": nc})
-                    except Exception:
+                    except SDError:
                         pass
                 pkg_list.append({"file_path": pkg.getFilePath(), "graphs": graphs})
-            except Exception as e:
+            except SDError as e:
                 pkg_list.append({"error": str(e)})
 
         current_nc = 0
         if current_graph is not None:
             try:
                 current_nc = len(list(current_graph.getNodes()))
-            except Exception:
+            except SDError:
                 pass
 
         return {
@@ -1035,13 +1462,16 @@ class CommandHandler:
             "message": "New package created. Use save_package to save it.",
         }
 
-    def create_graph(self, package_index=0, graph_name="MCP_Graph", package_path=None):
+    def create_graph(self, package_index=0, graph_name="MCP_Graph", package_path=None,
+                     material_model=None):
         safe_name = _sanitize_identifier(graph_name)
         pkg = self._resolve_package(package_index, package_path)
         new_graph = SDSBSCompGraph.sNew(pkg)
         new_graph.setIdentifier(safe_name)
         actual_id = new_graph.getIdentifier()
+        mm = self._apply_material_model(new_graph, material_model)
         return {
+            "material_model": mm,
             "identifier": actual_id,
             "requested_name": graph_name,
             "sanitized_name": safe_name,
@@ -1056,7 +1486,7 @@ class CommandHandler:
                 if res.getIdentifier() == graph_identifier:
                     res.delete()
                     return {"deleted": graph_identifier}
-            except Exception:
+            except SDError:
                 pass
         raise ValueError("Graph '{}' not found.".format(graph_identifier))
 
@@ -1065,7 +1495,7 @@ class CommandHandler:
         try:
             self._ui_mgr().openResourceInEditor(graph)
             return {"opened": graph_identifier, "success": True}
-        except Exception as e:
+        except SDError as e:
             return {"opened": graph_identifier, "warning": str(e)}
 
     def get_graph_info(self, graph_identifier=None, node_limit=100, include_connections=True):
@@ -1100,12 +1530,12 @@ class CommandHandler:
                                             "from_node":   sn.getIdentifier(),
                                             "from_output": sp.getId(),
                                         })
-                                except Exception:
+                                except SDError:
                                     pass
-                    except Exception:
+                    except SDError:
                         pass
                 node_list.append(info)
-            except Exception:
+            except SDError:
                 pass
 
         return {
@@ -1124,7 +1554,7 @@ class CommandHandler:
             if not os.path.exists(target_dir):
                 try:
                     os.makedirs(target_dir, exist_ok=True)
-                except Exception as e:
+                except SDError as e:
                     raise ValueError("Cannot create directory '{}': {}".format(target_dir, e))
             pkg_mgr.savePackageAs(pkg, file_path)
             return {"saved_to": file_path}
@@ -1171,9 +1601,9 @@ class CommandHandler:
                                     "to_node": nid,
                                     "to_input": pid,
                                 })
-                        except Exception:
+                        except SDError:
                             pass
-            except Exception:
+            except SDError:
                 pass
         return snapshot
 
@@ -1185,13 +1615,16 @@ class CommandHandler:
             ver = self._get_sd_version()
             results["sd_running"] = True
             results["sd_version"] = ver
-        except Exception as e:
+        except SDError as e:
             results["sd_running"] = False
             results["sd_version_error"] = str(e)
 
+        results["python_version"] = sys.version.split()[0]
+        results["sd_major"] = _sd_major()
+        results["output_usages_enabled"] = self._usages_supported()
         # Qt binding
         results["qt_binding"] = _QT_BINDING_USED or "NONE"
-        results["pyside_path"] = _pyside_path or "NOT FOUND"
+        results["pyside_path"] = _pyside_path or "native (no injection needed)"
 
         # Invoker
         inv = _Invoker.instance()
@@ -1202,11 +1635,16 @@ class CommandHandler:
             pkgs = list(self._pkg_mgr().getUserPackages())
             results["user_packages"] = len(pkgs)
             results["package_files"] = [p.getFilePath() for p in pkgs]
-        except Exception as e:
+        except SDError as e:
             results["packages_error"] = str(e)
 
         # Library cache
         results["library_cache_entries"] = len(self._lib_url_cache)
+        try:
+            results["library_index_graphs"] = len(self._lib_index())
+            results["library_dirs"] = self._lib_packages_dirs()
+        except SDError as e:
+            results["library_index_error"] = str(e)
 
         # Current graph
         try:
@@ -1216,7 +1654,7 @@ class CommandHandler:
                 results["current_graph_nodes"] = len(list(g.getNodes()))
             else:
                 results["current_graph"] = None
-        except Exception as e:
+        except SDError as e:
             results["current_graph_error"] = str(e)
 
         return results
@@ -1234,7 +1672,7 @@ class CommandHandler:
                 graph = None
                 try:
                     graph = self._ui_mgr().getCurrentGraph()
-                except Exception:
+                except SDError:
                     pass
                 if not graph:
                     pkgs = list(self._pkg_mgr().getUserPackages())
@@ -1245,7 +1683,7 @@ class CommandHandler:
                                 if "SDSBSCompGraph" in r.getClassName():
                                     graph = r
                                     break
-                            except Exception:
+                            except SDError:
                                 pass
                 if not graph:
                     temp_pkg = self._pkg_mgr().newUserPackage()
@@ -1262,7 +1700,7 @@ class CommandHandler:
                     result.append(did)
                     if len(result) >= limit:
                         break
-                except Exception:
+                except SDError:
                     pass
 
             return {
@@ -1275,7 +1713,7 @@ class CommandHandler:
             if temp_pkg is not None:
                 try:
                     self._pkg_mgr().unloadUserPackage(temp_pkg)
-                except Exception:
+                except SDError:
                     pass
 
     def create_node(self, definition_id, graph_identifier=None, position=None):
@@ -1290,7 +1728,7 @@ class CommandHandler:
                         definition_id))
         except ValueError:
             raise
-        except Exception:
+        except SDError:
             pass
 
         node = graph.newNode(definition_id)
@@ -1306,25 +1744,15 @@ class CommandHandler:
 
     def create_instance_node(self, resource_url, graph_identifier=None, position=None):
         graph = self._resolve_graph(graph_identifier)
-        resource = None
-        for pkg in list(self._pkg_mgr().getPackages()):
-            try:
-                r = pkg.findResourceFromUrl(resource_url)
-                if r is not None:
-                    resource = r
-                    break
-            except Exception:
-                pass
-        if not resource:
-            raise ValueError("Resource '{}' not found.".format(resource_url))
-        node = graph.newInstanceNode(resource)
-        if not node:
-            raise RuntimeError("newInstanceNode failed for '{}'.".format(resource_url))
-        if position and len(position) >= 2:
-            node.setPosition(float2(float(position[0]), float(position[1])))
+        node = self._new_library_node(graph, resource_url, position)
+        url = resource_url
+        try:
+            url = node.getReferencedResource().getUrl()
+        except SDError:
+            pass
         return {
             "node_id":      node.getIdentifier(),
-            "resource_url": resource_url,
+            "resource_url": url,
             "position":     list(position) if position else [0.0, 0.0],
             "note":         "Call get_node_info to find exact port IDs before connecting.",
         }
@@ -1343,9 +1771,11 @@ class CommandHandler:
         try:
             node.setAnnotationPropertyValueFromId("label", SDValueString.sNew(label))
             label_set = True
-        except Exception as e:
+        except SDError as e:
             _log("Warning: label set failed: {}".format(e))
+        usage_set = self._apply_output_usage(node, usage, graph)
         return {
+            "usage_set":  usage_set,
             "node_id":    node.getIdentifier(),
             "definition": "sbs::compositing::output",
             "usage":      usage,
@@ -1402,7 +1832,7 @@ class CommandHandler:
                     val_obj = node.getPropertyValue(prop)
                     if val_obj is not None:
                         info["value"] = self._serialize_sd_value(val_obj)
-                except Exception:
+                except SDError:
                     pass
                 try:
                     conns = node.getPropertyConnections(prop)
@@ -1417,19 +1847,19 @@ class CommandHandler:
                                     if sn and sp:
                                         info["connected_from"].append(
                                             "{}.{}".format(sn.getIdentifier(), sp.getId()))
-                                except Exception:
+                                except SDError:
                                     pass
-                except Exception:
+                except SDError:
                     pass
                 inputs.append(info)
-        except Exception:
+        except SDError:
             pass
 
         outputs = []
         try:
             for prop in list(node.getProperties(SDPropertyCategory.Output)):
                 outputs.append({"id": prop.getId()})
-        except Exception:
+        except SDError:
             pass
 
         annotations = []
@@ -1441,10 +1871,10 @@ class CommandHandler:
                     val_obj = node.getPropertyValue(prop)
                     if val_obj is not None:
                         info["value"] = self._serialize_sd_value(val_obj)
-                except Exception:
+                except SDError:
                     pass
                 annotations.append(info)
-        except Exception:
+        except SDError:
             pass
 
         is_lib = self._is_instance_node(node)
@@ -1467,7 +1897,7 @@ class CommandHandler:
             return None
         try:
             raw = val.get()
-        except Exception:
+        except SDError:
             return str(val)
         if hasattr(raw, 'x') and hasattr(raw, 'y'):
             d = {"x": raw.x, "y": raw.y}
@@ -1484,59 +1914,53 @@ class CommandHandler:
                 for i in range(raw.getSize()):
                     item = raw.getItem(i)
                     items.append(str(item.get()) if hasattr(item, 'get') else str(item))
-            except Exception:
+            except SDError:
                 return str(raw)
             return items
         return str(raw)
 
     def get_library_nodes(self, filter_text="", limit=200):
-        pkg_mgr = self._pkg_mgr()
-        results = []
-        for pkg in list(pkg_mgr.getPackages()):
-            try:
-                fp = pkg.getFilePath()
-                if not fp:
-                    continue
-                children = None
-                for recursive in (True, False):
-                    try:
-                        c = list(pkg.getChildrenResources(recursive))
-                        if c:
-                            children = c
-                            break
-                    except Exception:
-                        continue
-                if not children:
-                    continue
-                for res in children:
-                    try:
+        """Search SD's built-in library (resources/packages) plus graphs in
+        loaded packages. Returned URLs are portable 'pkg:///<identifier>'."""
+        ft = (filter_text or "").lower()
+        results, seen = [], set()
+        index = self._lib_index()
+        for ident in sorted(index, key=lambda k: (len(k), k)):
+            if ft and ft not in ident.lower():
+                continue
+            files = sorted(index[ident], key=lambda f: self._rank_lib_file(ident, f))
+            results.append({
+                "identifier": ident,
+                "url":        "pkg:///{}".format(ident),
+                "package":    os.path.basename(files[0]),
+                "source":     "library",
+            })
+            seen.add(ident.lower())
+            if len(results) >= limit:
+                break
+        if len(results) < limit:
+            for pkg in list(self._pkg_mgr().getPackages()):
+                try:
+                    fp = pkg.getFilePath() or "(unsaved)"
+                    for res in pkg.getChildrenResources(True):
                         if "SDSBSCompGraph" not in res.getClassName():
                             continue
                         rid = res.getIdentifier()
-                        if filter_text and filter_text.lower() not in rid.lower():
+                        if rid.lower() in seen or (ft and ft not in rid.lower()):
                             continue
-                        url = None
-                        try:
-                            url = res.getUrl()
-                        except Exception:
-                            pass
-                        if not url:
-                            continue
-                        # Update cache
-                        self._lib_url_cache[rid.lower()] = url
+                        seen.add(rid.lower())
                         results.append({
                             "identifier": rid,
-                            "url":        url,
+                            "url":        res.getUrl(),
                             "package":    os.path.basename(fp),
+                            "source":     "loaded_package",
                         })
                         if len(results) >= limit:
                             break
-                    except Exception:
-                        pass
+                except SDError:
+                    pass
                 if len(results) >= limit:
                     break
-            except Exception:
-                pass
         return {
             "count":     len(results),
             "nodes":     results,
@@ -1600,7 +2024,7 @@ class CommandHandler:
                     outs = [p.getId() for p in
                             list(from_node.getProperties(SDPropertyCategory.Output))]
                     from_output = outs[0] if outs else "unique_filter_output"
-                except Exception:
+                except SDError:
                     from_output = "unique_filter_output"
 
         # Determine to_input
@@ -1614,7 +2038,7 @@ class CommandHandler:
                            list(to_node.getProperties(SDPropertyCategory.Input))
                            if p.getId() not in _SYSTEM_PARAMS]
                     to_input = ins[0] if ins else "input1"
-                except Exception:
+                except SDError:
                     to_input = "input1"
 
         self._safe_connect(graph, from_node, from_output, to_node, to_input)
@@ -1641,12 +2065,12 @@ class CommandHandler:
         try:
             for p in list(node.getProperties(SDPropertyCategory.Input)):
                 input_ids.add(p.getId())
-        except Exception:
+        except SDError:
             pass
         try:
             for p in list(node.getProperties(SDPropertyCategory.Annotation)):
                 annot_ids.add(p.getId())
-        except Exception:
+        except SDError:
             pass
 
         if (input_ids or annot_ids) and \
@@ -1664,7 +2088,7 @@ class CommandHandler:
                 setter(parameter_id, sd_value)
                 set_ok = True
                 break
-            except Exception as e:
+            except SDError as e:
                 last_err = e
 
         if not set_ok:
@@ -1678,12 +2102,22 @@ class CommandHandler:
             "value_type":   value_type,
         }
 
+    def _set_absolute_output_size(self, graph, width_log2, height_log2):
+        """Set $outputsize as an ABSOLUTE size. New graphs default to
+        'Relative to parent', where (11, 11) means parent size x 2^11 and SD
+        clamps to 8192x8192 — so the inheritance method must be switched."""
+        prop = graph.getPropertyFromId("$outputsize", SDPropertyCategory.Input)
+        if SDPropertyInheritanceMethod is not None and prop is not None:
+            try:
+                graph.setPropertyInheritanceMethod(prop, SDPropertyInheritanceMethod.Absolute)
+            except SDError as e:
+                _log("Warning: could not set $outputsize to Absolute: {}".format(e))
+        graph.setInputPropertyValueFromId(
+            "$outputsize", SDValueInt2.sNew(int2(int(width_log2), int(height_log2))))
+
     def set_graph_output_size(self, width_log2=11, height_log2=11, graph_identifier=None):
         graph = self._resolve_graph(graph_identifier)
-        graph.setInputPropertyValueFromId(
-            "$outputsize",
-            SDValueInt2.sNew(int2(int(width_log2), int(height_log2)))
-        )
+        self._set_absolute_output_size(graph, width_log2, height_log2)
         return {
             "graph":       graph.getIdentifier(),
             "width_log2":  width_log2,
@@ -1697,7 +2131,7 @@ class CommandHandler:
 
     def create_batch_graph(self, graph_name, package_index=0, package_path=None,
                            nodes=None, connections=None, output_size_log2=11,
-                           open_in_editor=True):
+                           open_in_editor=True, material_model=None):
         """
         Create a complete graph in one call.
         Supports atomic nodes, library nodes (via resource_url or keyword),
@@ -1712,17 +2146,16 @@ class CommandHandler:
         pkg   = self._resolve_package(package_index, package_path)
         graph = SDSBSCompGraph.sNew(pkg)
         graph.setIdentifier(safe_name)
+        self._apply_material_model(graph, material_model)
 
         try:
-            graph.setInputPropertyValueFromId(
-                "$outputsize",
-                SDValueInt2.sNew(int2(int(output_size_log2), int(output_size_log2))))
-        except Exception as e:
+            self._set_absolute_output_size(graph, output_size_log2, output_size_log2)
+        except SDError as e:
             _log("Warning: Could not set graph output size: {}".format(e))
 
         try:
             _known_defs = {d.getId() for d in list(graph.getNodeDefinitions())}
-        except Exception:
+        except SDError:
             _known_defs = set()
 
         alias_map = {}       # alias -> (node_obj, node_id_str)
@@ -1745,28 +2178,10 @@ class CommandHandler:
                 node = None
 
                 if defn_id == "sbs::compositing::output":
-                    lv = label or usage or "output"
-                    node = graph.newNode("sbs::compositing::output")
-                    if node:
-                        try:
-                            node.setAnnotationPropertyValueFromId(
-                                "label", SDValueString.sNew(lv))
-                        except Exception:
-                            pass
+                    node = self._new_output_node(graph, usage, label)
 
                 elif res_url:
-                    resource = None
-                    for p in list(self._pkg_mgr().getPackages()):
-                        try:
-                            r = p.findResourceFromUrl(res_url)
-                            if r is not None:
-                                resource = r
-                                break
-                        except Exception:
-                            pass
-                    node = graph.newInstanceNode(resource) if resource else None
-                    if not node:
-                        raise ValueError("Resource '{}' not found.".format(res_url))
+                    node = self._new_library_node(graph, res_url)
 
                 elif lib_kw:
                     node = self._create_library_node(graph, lib_kw)
@@ -1795,7 +2210,7 @@ class CommandHandler:
                 created.append({
                     "alias": alias, "node_id": node_id, "definition": actual_def})
 
-            except Exception as e:
+            except SDError as e:
                 _log("Error creating node '{}': {}".format(alias, e))
                 failed.append({"alias": alias, "error": str(e)})
 
@@ -1818,13 +2233,13 @@ class CommandHandler:
             try:
                 self._safe_connect(graph, fn, fo, tn, ti)
                 conn_results.append({"from": fa, "to": ta, "success": True})
-            except Exception as e:
+            except SDError as e:
                 conn_results.append({"from": fa, "to": ta, "success": False, "error": str(e)})
 
         if open_in_editor:
             try:
                 self._ui_mgr().openResourceInEditor(graph)
-            except Exception as e:
+            except SDError as e:
                 _log("Warning: openResourceInEditor failed: {}".format(e))
 
         return {
@@ -1847,7 +2262,7 @@ class CommandHandler:
     def build_material_graph(self, graph_name, recipe_name,
                               package_index=0, package_path=None,
                               overrides=None, output_size_log2=11,
-                              open_in_editor=True):
+                              open_in_editor=True, material_model=None):
         """
         Build a complete PBR material graph from a named recipe.
         overrides: dict of parameter overrides applied on top of recipe defaults.
@@ -1880,12 +2295,14 @@ class CommandHandler:
             connections      = connections,
             output_size_log2 = output_size_log2,
             open_in_editor   = open_in_editor,
+            material_model   = material_model,
         )
 
     def build_heightmap_graph(self, graph_name, style,
                                package_index=0, package_path=None,
                                output_size_log2=11, open_in_editor=True,
-                               detail_level=2, scale=5.0, disorder=0.5):
+                               detail_level=2, scale=5.0, disorder=0.5,
+                               material_model=None):
         """
         Build a heightmap graph for terrain/rock/cliff styles.
         style: 'cliff', 'rock', 'cracked', 'sand', 'mud', 'mountain', 'cobblestone'
@@ -1910,6 +2327,7 @@ class CommandHandler:
             connections      = connections,
             output_size_log2 = output_size_log2,
             open_in_editor   = open_in_editor,
+            material_model   = material_model,
         )
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -2005,7 +2423,7 @@ class CommandHandler:
 
         try:
             _known_defs = {d.getId() for d in list(graph.getNodeDefinitions())}
-        except Exception:
+        except SDError:
             _known_defs = set()
 
         alias_map = {}
@@ -2026,27 +2444,9 @@ class CommandHandler:
             try:
                 node = None
                 if defn_id == "sbs::compositing::output":
-                    lv = label or usage or "output"
-                    node = graph.newNode("sbs::compositing::output")
-                    if node:
-                        try:
-                            node.setAnnotationPropertyValueFromId(
-                                "label", SDValueString.sNew(lv))
-                        except Exception:
-                            pass
+                    node = self._new_output_node(graph, usage, label)
                 elif res_url:
-                    resource = None
-                    for p in list(self._pkg_mgr().getPackages()):
-                        try:
-                            r = p.findResourceFromUrl(res_url)
-                            if r is not None:
-                                resource = r
-                                break
-                        except Exception:
-                            pass
-                    node = graph.newInstanceNode(resource) if resource else None
-                    if not node:
-                        raise ValueError("Resource '{}' not found.".format(res_url))
+                    node = self._new_library_node(graph, res_url)
                 elif lib_kw:
                     node = self._create_library_node(graph, lib_kw)
                 else:
@@ -2068,7 +2468,7 @@ class CommandHandler:
                 alias_map[alias] = (node, nid)
                 created.append({"alias": alias, "node_id": nid})
 
-            except Exception as e:
+            except SDError as e:
                 _log("Error creating node '{}': {}".format(alias, e))
                 failed.append({"alias": alias, "error": str(e)})
 
@@ -2086,7 +2486,7 @@ class CommandHandler:
             try:
                 self._safe_connect(graph, fn, fo, tn, ti)
                 conn_results.append({"from": fa, "to": ta, "success": True})
-            except Exception as e:
+            except SDError as e:
                 conn_results.append({"from": fa, "to": ta, "success": False, "error": str(e)})
 
         return {
@@ -2120,7 +2520,7 @@ class CommandHandler:
         for i, node in enumerate(nodes):
             try:
                 node.setPosition(float2(x, y))
-            except Exception:
+            except SDError:
                 pass
             x += node_spacing_x
             if (i + 1) % per_row == 0:
@@ -2169,7 +2569,7 @@ class CommandHandler:
                 node_name=node_name or "",
             )
             return {"status": "ok", "result": result}
-        except Exception as e:
+        except SDError as e:
             return {"status": "error", "message": str(e)}
 
     def execute_code(self, code):
@@ -2181,7 +2581,7 @@ class CommandHandler:
         def _open_in_editor_safe(g):
             try:
                 app_obj.getUIMgr().openResourceInEditor(g)
-            except Exception as e:
+            except SDError as e:
                 print("[MCP] open_in_editor warning: {}".format(e))
 
         namespace = {
@@ -2194,7 +2594,7 @@ class CommandHandler:
         try:
             with redirect_stdout(stdout_cap), redirect_stderr(stderr_cap):
                 exec(compile(code, "<mcp_execute>", "exec"), namespace)
-        except Exception as e:
+        except SDError as e:
             error = "{}: {}".format(type(e).__name__, e)
             stderr_cap.write(traceback.format_exc())
 
@@ -2217,7 +2617,7 @@ def initializeSDPlugin():
     if _pyside_path:
         _log("PySide path injected: {}".format(_pyside_path))
     else:
-        _log("Warning: PySide6 path not found")
+        _log("PySide6 importable natively (no path injection)")
 
     if _QT_BINDING_USED:
         _log("Qt binding: {}".format(_QT_BINDING_USED))
@@ -2235,7 +2635,7 @@ def initializeSDPlugin():
         _server.start()
         _log("Plugin v{} ready! Port: {}".format(
             ".".join(map(str, PLUGIN_VERSION)), DEFAULT_PORTS))
-    except Exception as e:
+    except SDError as e:
         _log("FATAL: Failed to start server: {}".format(e))
         traceback.print_exc()
 
