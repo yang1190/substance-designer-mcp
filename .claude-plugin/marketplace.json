@@ -1,0 +1,19 @@
+{
+  "name": "substance-designer-mcp",
+  "owner": {
+    "name": "yang1190",
+    "email": "yang1190@gmail.com"
+  },
+  "metadata": {
+    "description": "Skills for building procedural PBR materials in Substance 3D Designer with the SD MCP plugin"
+  },
+  "plugins": [
+    {
+      "name": "sd-material-skills",
+      "source": "./",
+      "description": "SD material workflow, material recipes and node techniques (Chinese)",
+      "version": "1.0.0",
+      "category": "design"
+    }
+  ]
+}

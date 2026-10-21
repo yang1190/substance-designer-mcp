@@ -4,6 +4,16 @@ All notable changes to the Substance Designer MCP Plugin are documented here.
 
 ---
 
+## [1.8.0] — 2026-10-21 — Claude skills for material work
+
+### Skills (new, `sd-material-skills` plugin v1.0.0)
+- `skills/sd-material-workflow`, `skills/sd-material-recipes`, `skills/sd-node-techniques`: Agent Skills (Chinese) distilled from the SD_Textures project — 3 work modes, `_build/` script framework, SD 16 / MCP pitfalls (Blend 4 = AddSub / 5 = Max / 6 = Min, Slope Blur and Tile Sampler enums, absolute output size, 16-bit format, 60 s timeout + async compute), 9 material categories, 13 technique stages
+- The repo is a Claude Code plugin marketplace: `.claude-plugin/plugin.json` + `marketplace.json`
+- `skills/packages/*.skill` for Claude.ai upload, rebuilt with `tests/build_skill_packages.py`
+- Offline tests: SKILL.md frontmatter, packages in sync with sources, plugin manifests
+
+---
+
 ## [1.7.1] — 2026-10-21 — create_graph defaults to 2048
 
 ### Plugin (v3.10.1) / Bridge Server (v2.3.1)

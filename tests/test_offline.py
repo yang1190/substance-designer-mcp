@@ -378,5 +378,50 @@ class TestLibraryPaths(unittest.TestCase):
         self.assertEqual(LP.split_ref("perlin_noise"), (None, "perlin_noise"))
 
 
+class TestSkills(unittest.TestCase):
+    """skills/<name>/SKILL.md frontmatter and the Claude plugin manifests."""
+    SKILLS = os.path.join(ROOT, "skills")
+
+    def _frontmatter(self, path):
+        text = open(path, encoding="utf-8").read()
+        self.assertTrue(text.startswith("---\n"), path)
+        head = text.split("---\n", 2)[1]
+        meta = {}
+        for line in head.splitlines():
+            if ":" in line:
+                k, v = line.split(":", 1)
+                meta[k.strip()] = v.strip()
+        return meta, text
+
+    def test_skill_frontmatter(self):
+        names = [n for n in os.listdir(self.SKILLS)
+                 if os.path.isfile(os.path.join(self.SKILLS, n, "SKILL.md"))]
+        self.assertGreaterEqual(len(names), 3)
+        for n in names:
+            meta, text = self._frontmatter(os.path.join(self.SKILLS, n, "SKILL.md"))
+            self.assertEqual(meta.get("name"), n)
+            self.assertTrue(meta.get("description"), n)
+            self.assertLessEqual(len(meta["description"]), 1024, n)
+            self.assertNotIn("<", meta["description"], n)
+
+    def test_packages_match_sources(self):
+        import zipfile
+        for n in os.listdir(self.SKILLS):
+            src = os.path.join(self.SKILLS, n, "SKILL.md")
+            if not os.path.isfile(src):
+                continue
+            pkg = os.path.join(self.SKILLS, "packages", n + ".skill")
+            self.assertTrue(os.path.isfile(pkg), pkg + " missing: run tests/build_skill_packages.py")
+            with zipfile.ZipFile(pkg) as z:
+                self.assertEqual(z.read(n + "/SKILL.md").replace(b"\r\n", b"\n"),
+                                 open(src, "rb").read().replace(b"\r\n", b"\n"),
+                                 pkg + " is stale: run tests/build_skill_packages.py")
+
+    def test_plugin_manifests(self):
+        man = json.load(open(os.path.join(ROOT, ".claude-plugin", "plugin.json"), encoding="utf-8"))
+        mkt = json.load(open(os.path.join(ROOT, ".claude-plugin", "marketplace.json"), encoding="utf-8"))
+        self.assertIn(man["name"], [p["name"] for p in mkt["plugins"]])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

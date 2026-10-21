@@ -43,6 +43,9 @@ Tested on **Substance 3D Designer 16.0.5** (Python 3.13, PySide6 6.8); SD 15.x r
 - **SDF**: `list_sdf_functions`, `build_sdf_scene` (3D viewer renders: beauty, depth, normals, material ID…) and `set_shape_splatter_sdf` (scatter custom SDF shapes, per-shape variation via `shape.id`).
 - Knowledge base: Shape splatter v2 + mappers, Grid atlas, Angle to vector, 3D viewer, function-graph and SDF conventions.
 
+**Claude skills for material work**
+- [`skills/`](skills/README.md): three Agent Skills (Chinese) — production workflow, recipes by material type, node techniques by stage — installable as the `sd-material-skills` Claude Code plugin. See [Claude Skills](#claude-skills).
+
 **Validation on 16.0.5**: 79/79 material recipes and 8/8 heightmap styles build with 0 node and 0 connection failures; SDF scenes, SDF rock scattering and pixel processor functions render correctly.
 
 ---
@@ -269,6 +272,25 @@ create_instance_node(resource_url="D:/libs/rocks.sbs#rock_a")  # any .sbs, even 
 - On an identifier collision the visible built-in graph wins; the custom copy is listed with a qualified URL (`File.sbs#identifier`, field `shadowed_by`). Keyword (prefix / substring) matching prefers built-in graphs, so adding a library never changes what the recipes get.
 - A package that uses custom nodes references them by **relative path** when saved (SD's default *path storage: relative*): keep the library at a fixed location.
 - `remove_library_path` on a folder that comes from SD's settings makes the plugin ignore it; SD's own settings are never modified.
+
+## Claude Skills
+
+The repo is also a Claude Code plugin marketplace with one plugin, **`sd-material-skills`**: three Agent Skills (written in Chinese) distilled from building ~20 procedural PBR materials with this MCP server.
+
+| Skill | Trigger | Contents |
+|---|---|---|
+| `sd-material-workflow` | new material, iterating on feedback, breaking down a .sbs | staged build-script framework, async preview/export, SD 16 + MCP pitfalls, delivery checklist |
+| `sd-material-recipes` | choosing an approach by material type | rocky ground, aggregate, pebbles, desert, cliffs, slate, tiles/cobblestone, forest floor, organic |
+| `sd-node-techniques` | looking up a node technique by stage | shape generators, scattering, Flood Fill data, cuts, cracks, sand, moss, water, maps, BaseColor, Roughness |
+
+```
+/plugin marketplace add yang1190/substance-designer-mcp
+/plugin install sd-material-skills@substance-designer-mcp
+```
+
+Or copy `skills/<name>/` into `~/.claude/skills/`, or upload `skills/packages/*.skill` in Claude.ai (*Settings > Capabilities > Skills*). Details: [skills/README.md](skills/README.md).
+
+---
 
 ## SD 16.0.x Notes
 
