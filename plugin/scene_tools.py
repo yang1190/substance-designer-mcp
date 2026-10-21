@@ -81,14 +81,22 @@ class SceneToolsMixin(object):
         }
 
     def create_graph(self, package_index=0, graph_name="MCP_Graph", package_path=None,
-                     material_model=None):
+                     material_model=None, output_size_log2=11):
         safe_name = _sanitize_identifier(graph_name)
         pkg = self._resolve_package(package_index, package_path)
         new_graph = SDSBSCompGraph.sNew(pkg)
         new_graph.setIdentifier(safe_name)
         actual_id = new_graph.getIdentifier()
         mm = self._apply_material_model(new_graph, material_model)
+        # SD creates graphs at 256x256 (relative to parent). Flood Fill /
+        # distance-based library nodes misbehave at that size, so default to an
+        # absolute 2048x2048 like the builders do. 0 / None keeps SD's default.
+        size = None
+        if output_size_log2:
+            self._set_absolute_output_size(new_graph, output_size_log2, output_size_log2)
+            size = "{0}x{0}".format(2 ** int(output_size_log2))
         return {
+            "output_size": size or "SD default (256x256, relative to parent)",
             "material_model": mm,
             "identifier": actual_id,
             "requested_name": graph_name,

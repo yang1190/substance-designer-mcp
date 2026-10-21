@@ -1352,7 +1352,7 @@ WORKFLOW = {
     ],
     "recommended_workflow": [
         "1. get_scene_info — verify SD is connected and packages are loaded",
-        "2. create_graph — create a new graph with a descriptive name",
+        "2. create_graph — create a new graph with a descriptive name (absolute 2048x2048 by default; output_size_log2=0 keeps SD's 256 default)",
         "3. For atomic nodes: create_node(definition_id='sbs::compositing::...')",
         "4. For library nodes: get_library_nodes(filter_text='keyword') to get pkg:// URL",
         "5. create_instance_node(resource_url='pkg://...') for library nodes",
@@ -1563,7 +1563,7 @@ CONCEPTS = {
             12: "4096×4096",
             13: "8192×8192",
         },
-        "set_via": "set_graph_output_size(width_log2=11, height_log2=11)",
+        "set_via": "set_graph_output_size(width_log2=11, height_log2=11); create_graph(output_size_log2=11) sets it at creation (default)",
     },
     "pbr_workflow": {
         "name": "PBR Metal/Roughness Workflow",

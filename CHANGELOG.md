@@ -4,6 +4,13 @@ All notable changes to the Substance Designer MCP Plugin are documented here.
 
 ---
 
+## [1.7.1] — 2026-10-21 — create_graph defaults to 2048
+
+### Plugin (v3.10.1) / Bridge Server (v2.3.1)
+- `create_graph(output_size_log2=11)`: new graphs are created at an **absolute 2048x2048** instead of SD's 256x256 (relative to parent), matching `build_material_graph` / `build_heightmap_graph` / batch builders. At 256 the Flood Fill based nodes (e.g. Tom Jacobs `FloodFills` → `ShiftRocks`) only found a few tiny islands. `output_size_log2=0` keeps SD's default; the result reports `output_size`
+
+---
+
 ## [1.7.0] — 2026-10-21 — Custom Library folders
 
 ### Plugin (v3.10.0)

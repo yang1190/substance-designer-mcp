@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-sd_mcp_bridge.py - Substance Designer MCP Bridge v2.3.0
+sd_mcp_bridge.py - Substance Designer MCP Bridge v2.3.1
 
 Relay between Claude (stdio/FastMCP) and the SD plugin (TCP).
 
@@ -198,7 +198,7 @@ async def _async_send(cmd_type: str, params: dict = None) -> str:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def _lifespan(app: FastMCP):
-    logger.info(f"Substance Designer MCP Bridge v2.3.0 -> SD plugin on port {_sd_port}")
+    logger.info(f"Substance Designer MCP Bridge v2.3.1 -> SD plugin on port {_sd_port}")
     logger.info("Ensure Substance Designer is running with the MCP plugin loaded.")
     yield {}
     logger.info("Substance Designer MCP bridge shutting down.")
@@ -237,7 +237,8 @@ async def create_graph(ctx: Context,
                        package_index: int = 0,
                        graph_name: str = "MCP_Graph",
                        package_path: Optional[str] = None,
-                       material_model: Optional[str] = None) -> str:
+                       material_model: Optional[str] = None,
+                       output_size_log2: int = 11) -> str:
     """
     Create a new SBS Compositing Graph in Substance Designer.
     - package_index: which loaded package (0 = first/current)
@@ -245,6 +246,9 @@ async def create_graph(ctx: Context,
     - package_path: optional full path to specific .sbs file
     - material_model: SD 16+ only. None = 'openpbr_v1_1' (SD 16 default),
       '' = leave Undefined, or any identifier from list_material_models.
+    - output_size_log2: absolute output size, 11 = 2048x2048 (default),
+      10 = 1024, 12 = 4096. 0 keeps SD's own default (256x256 relative to
+      parent) — too small for Flood Fill / distance based nodes.
 
     IMPORTANT: graph_name should use only letters, digits, underscores.
     Spaces and special characters are automatically sanitized.
@@ -253,6 +257,7 @@ async def create_graph(ctx: Context,
         "package_index": package_index,
         "graph_name": graph_name,
         "package_path": package_path,
+        "output_size_log2": output_size_log2,
     }
     if material_model is not None:
         params["material_model"] = material_model
@@ -1237,13 +1242,13 @@ async def list_material_models(ctx: Context) -> str:
 def main():
     global _sd_port
 
-    parser = argparse.ArgumentParser(description="Substance Designer MCP Bridge v2.3.0")
+    parser = argparse.ArgumentParser(description="Substance Designer MCP Bridge v2.3.1")
     parser.add_argument("--port", type=int, default=9881,  # BUG-B03 fix: default is 9881
                         help="TCP port to connect to the SD plugin (default: 9881)")
     args = parser.parse_args()
     _sd_port = args.port
 
-    logger.info(f"SD MCP Bridge v2.3.0 -> SD plugin on port {_sd_port}")
+    logger.info(f"SD MCP Bridge v2.3.1 -> SD plugin on port {_sd_port}")
     mcp.run()
 
 
