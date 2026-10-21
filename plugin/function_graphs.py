@@ -23,13 +23,12 @@ Facts confirmed on SD 16.0.5:
 """
 
 import os
-import re
 
 from sd.api.sdproperty import SDPropertyCategory
 from sd.api.sdbasetypes import float2
 from sd.api.sdvaluestring import SDValueString
 
-from .common import SDError, _log
+from .common import SDError
 
 try:
     from sd.api.sbs.sdsbsfunctiongraph import SDSBSFunctionGraph
@@ -98,42 +97,20 @@ def _norm_type(type_id):
 
 class FunctionGraphMixin(object):
     """Mixed into CommandHandler. Relies on: _app, _pkg_mgr, _resolve_graph,
-    _find_node, _make_sd_value, _lib_packages_dirs, _new_library_node,
+    _find_node, _make_sd_value, _lib_index, _lib_source, _new_library_node,
     _set_node_params, _new_output_node, create_graph."""
-
-    _FN_RE = re.compile(rb'<function>\s*<identifier v="([^"]+)"')
 
     # ── function library index ────────────────────────────────────────────
     def _fn_index(self):
-        """identifier -> [paths] for every <function> in resources/packages."""
-        if getattr(self, "_fn_file_index", None) is not None:
-            return self._fn_file_index
-        index, hidden = {}, set()
-        for d in self._lib_packages_dirs():
-            for fn in os.listdir(d):
-                if not fn.lower().endswith(".sbs"):
-                    continue
-                fp = os.path.join(d, fn).replace("\\", "/")
-                try:
-                    with open(fp, "rb") as fh:
-                        data = fh.read()
-                except SDError:
-                    continue
-                ms = list(self._FN_RE.finditer(data))
-                for i, m in enumerate(ms):
-                    ident = m.group(1).decode("utf-8", "ignore")
-                    end = ms[i + 1].start() if i + 1 < len(ms) else len(data)
-                    a_end = data.find(b"</attributes>", m.end(), end)
-                    if a_end >= 0 and data.find(b'<hideInLibrary v="1"/>', m.end(), a_end) >= 0:
-                        hidden.add((ident, fp))
-                    index.setdefault(ident, []).append(fp)
-        self._fn_file_index, self._fn_hidden = index, hidden
-        _log("Function library index: {} functions".format(len(index)))
-        return index
+        """identifier -> [paths] for every <function> in the library folders
+        (built-in + custom, see LibraryMixin._lib_build)."""
+        self._lib_index()
+        return self._fn_file_index
 
     def _rank_fn_file(self, ident, path):
         stem = os.path.splitext(os.path.basename(path))[0].lower()
         return ((ident, path) in self._fn_hidden,
+                0 if self._lib_source(path) == "builtin" else 1,
                 0 if stem in ("3d_functions", "functions") else 1, len(stem))
 
     @staticmethod

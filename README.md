@@ -18,8 +18,9 @@ Control Substance Designer from any MCP-compatible AI client (Claude Code, Claud
 
 - **Natural language → SD graph**: "Create a cracked concrete material" → 44-node PBR graph with height, normal, roughness, AO, baseColor, metallic outputs
 - **79 built-in material recipes**: pro-grade materials using the same node architecture as professional SD artists
-- **40 MCP tools**: get scene info, create/delete graphs, create nodes, connect nodes, set parameters, build full materials in one call, function graphs and SDF scenes (SD 16)
+- **44 MCP tools**: get scene info, create/delete graphs, create nodes, connect nodes, set parameters, build full materials in one call, function graphs and SDF scenes (SD 16)
 - **Library node support**: Clouds, Cells, Perlin Noise, Polygon, Edge Detect, Flood Fill, Multi-Directional Warp, etc.
+- **Custom Library folders**: your own / third-party `.sbs` packages (SD's Library watched paths, `add_library_path`) are indexed and usable like built-in nodes
 - **Thread-safe**: All SD API calls dispatched to Qt main thread via Signal/Slot queued connection
 
 ---
@@ -93,7 +94,8 @@ sd_mcp_plugin/           ← copy every .py file from plugin/
 ├── transport.py         ← Qt main-thread dispatcher + TCP server (port 9881)
 ├── handler.py           ← CommandHandler: command table built from the mixins below
 ├── core.py              ← SD helpers: lookup, values, parameters, usages, material model
-├── library.py           ← Library node resolution (resources/packages, non-legacy first)
+├── library.py           ← Library node resolution (built-in + custom folders, non-legacy first)
+├── library_paths.py     ← custom Library folders: SD project files, plugin config, env var
 ├── scene_tools.py       ← scene / package / graph tools, diagnostic
 ├── node_tools.py        ← node / connection / parameter tools, arrange_nodes
 ├── builders.py          ← batch graph builder, recipe builders
@@ -200,7 +202,12 @@ List all available material recipes
 | **`set_shape_splatter_sdf`** | **SD 16+: scatter a custom SDF shape with Shape splatter v2** |
 | **`render_outputs`** | **Compute a graph and return per-output stats + PNG thumbnails (images) so the AI can check its result** |
 | `export_outputs` | Compute and save output textures (png / tga / exr / tif / jpg) |
-| `validate_library` | Instantiate every Library graph (batched) — health check after an SD update |
+| `validate_library` | Instantiate every Library graph (batched) — health check after an SD update (`source='custom'` for custom folders) |
+| `get_library_nodes` | Search built-in + custom Library graphs (`source`: all / builtin / custom / loaded; matches identifier, label, category) |
+| `list_library_paths` | Every folder scanned for `.sbs` packages, where it comes from, packages / graphs found |
+| **`add_library_path`** | **Permanently add a folder of `.sbs` packages (persistent config, survives plugin / SD updates)** |
+| `remove_library_path` | Remove a folder (a folder from SD's own settings is ignored instead) |
+| `rescan_library` | Re-index now (normally automatic within ~2 s) |
 | `close_package` | Close a package (refuses unsaved changes unless `force`) |
 | **`get_recipe_info`** | **Get details about a specific recipe** |
 | **`apply_recipe`** | **Apply a recipe to an existing graph** |
@@ -233,6 +240,35 @@ build_heightmap_graph(graph_name="CliffHM", style="cliff", detail_level=3, scale
 `cliff`, `rock`, `sand`, `cracked`, `mud`, `mountain`, `cobblestone`, `terrain`
 
 ---
+
+## Custom Library folders
+
+The plugin indexes `.sbs` packages outside SD's install, so graphs from your own or third-party libraries work everywhere a library node is accepted (`create_instance_node`, batch `library_keyword` / `resource_url`, recipes).
+
+Folders come from, in this order:
+
+| Source | Where | Notes |
+|---|---|---|
+| `builtin` | `<SD>/resources/packages` | top level only, as before |
+| `sd_project` | SD's own Library watched paths — *Edit > Preferences > Projects > Library*, read from `%LOCALAPPDATA%/Adobe/Adobe Substance 3D Designer/<major.minor>/user_project.sbsprj` (+ `default_project.sbsprj`, projects listed in `default_configuration.sbscfg`) | recursion / enabled / exclude pattern honoured; URL aliases (`sbs://`, custom aliases) resolved |
+| `plugin_config` | `add_library_path(path, recursive=True)` → `%LOCALAPPDATA%/Adobe/Adobe Substance 3D Designer/sd_mcp/library_paths.json` | outside the plugin folder and not tied to an SD version: survives plugin updates and SD upgrades |
+| `env` | `SD_MCP_LIBRARY_PATHS` (separated by `;` on Windows, `:` elsewhere; end a folder with `*` to scan it recursively) | |
+
+```python
+list_library_paths()                       # folders, source, recursion, packages / graphs found
+add_library_path("D:/SD/MyLibrary")        # persistent; recursive by default
+get_library_nodes(source="custom")         # label, category, description, path of each graph
+get_library_nodes(filter_text="Tom Jacobs")  # also matches labels and categories
+create_instance_node(resource_url="FloodFills")          # identifier
+create_instance_node(resource_url="Flood Fills")         # Library label
+create_instance_node(resource_url="Rocks.sbs#RockSharp_001")   # qualified: package file + identifier
+create_instance_node(resource_url="D:/libs/rocks.sbs#rock_a")  # any .sbs, even outside library folders
+```
+
+- New or edited `.sbs` files in custom folders are picked up automatically (checked at most every 2 s); `rescan_library()` forces it.
+- On an identifier collision the visible built-in graph wins; the custom copy is listed with a qualified URL (`File.sbs#identifier`, field `shadowed_by`). Keyword (prefix / substring) matching prefers built-in graphs, so adding a library never changes what the recipes get.
+- A package that uses custom nodes references them by **relative path** when saved (SD's default *path storage: relative*): keep the library at a fixed location.
+- `remove_library_path` on a folder that comes from SD's settings makes the plugin ignore it; SD's own settings are never modified.
 
 ## SD 16.0.x Notes
 
@@ -309,7 +345,7 @@ python tests/run_regression.py --quick   # ~2 min smoke test
 python tests/run_regression.py           # full suite (~15 min on SD 16.0.5)
 ```
 
-`test_offline.py` needs no Substance Designer: it checks the syntax of every file, the recipe structure (aliases, connections, outputs), and validates every recipe connection port and parameter id against `tests/data/sd_node_ports.json` — a snapshot of the real node definitions taken from SD with `python tests/update_port_snapshot.py` (rerun it after an SD update). With the `mcp` package installed it also checks the bridge tools. `.github/workflows/ci.yml` runs it on every push.
+`test_offline.py` needs no Substance Designer: it checks the syntax of every file, the custom Library path logic (SD `.sbsprj` parsing with URL aliases, plugin config, env var, recursive scan with exclude patterns, `.sbs` header parsing), the recipe structure (aliases, connections, outputs), and validates every recipe connection port and parameter id against `tests/data/sd_node_ports.json` — a snapshot of the real node definitions taken from SD with `python tests/update_port_snapshot.py` (rerun it after an SD update). With the `mcp` package installed it also checks the bridge tools. `.github/workflows/ci.yml` runs it on every push.
 
 `run_regression.py` uses only the Python standard library and talks to the plugin's TCP port directly. It builds everything in a fresh unsaved package (closed at the end) and checks:
 
@@ -318,11 +354,12 @@ python tests/run_regression.py           # full suite (~15 min on SD 16.0.5)
 | recipes / heightmaps | every recipe builds with 0 node / 0 connection failures; height, base color, normal and roughness are not uniform; height is not low-contrast (`render_outputs` statistics) |
 | performance | a recipe that takes more than 10 s to render at 256 px |
 | library | every graph visible in SD's Library instantiates (`validate_library`) |
+| custom_library | the built-in root is indexed; every visible graph in custom Library folders instantiates (`validate_library(source='custom')`) |
 | sd16 | OpenPBR identifiers / dual usages, SDF scene, Shape splatter v2 SDF rock, pixel-processor function |
 
 Known problems live in `tests/regression_baseline.json`: they are reported as **KNOWN** and do not fail the run; a listed problem that passes is reported as **FIXED** (remove it from the baseline). Any other failure is **FAIL** and the script exits with code 1. Reports (Markdown + JSON with all statistics) are written to `tests/reports/`.
 
-The first run on SD 16.0.5 found 12 recipes with flat / low-contrast outputs and 3 slow fabric recipes; all were fixed in plugin 3.7.0 and the baseline is now empty (latest full run: 99 pass, 0 known, 0 fail).
+The first run on SD 16.0.5 found 12 recipes with flat / low-contrast outputs and 3 slow fabric recipes; all were fixed in plugin 3.7.0 and the baseline is now empty (latest full run with plugin 3.10.0: 102 pass, 0 known, 0 fail).
 
 ---
 

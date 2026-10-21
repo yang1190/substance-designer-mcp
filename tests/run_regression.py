@@ -20,6 +20,9 @@ What it checks
   6. sdf_scene         build_sdf_scene renders a non-flat beauty pass
   7. splatter_sdf      Shape splatter v2 scatters an SDF shape (non-flat height)
   8. pixel_processor   build_function_graph on a pixel processor (non-flat)
+  9. custom_library    custom Library folders (SD's watched paths, plugin
+                       config, env var) are scanned and every visible graph
+                       in them instantiates
 
 Everything is built in a fresh, unsaved package that is closed at the end;
 open user packages are never modified.
@@ -283,6 +286,8 @@ def run(args):
                     output_size_log2=args.resolution, open_in_editor=False), pkg, args.resolution)
 
         if not args.only:
+            print("\n[custom library]")
+            custom_library_checks(sd, rep)
             print("\n[sd16 features]")
             sd16_checks(sd, rep, pkg)
     finally:
@@ -414,6 +419,36 @@ def _safe_delete(sd, g, pkg):
         sd.call("delete_graph", graph_identifier=g, package_index=pkg)
     except Exception:  # noqa: BLE001
         pass
+
+
+def custom_library_checks(sd, rep):
+    """Custom Library folders: scanned, and their visible graphs instantiate."""
+    try:
+        lp = sd.call("list_library_paths")
+    except Exception as e:  # noqa: BLE001
+        rep.add("custom_library", "list_library_paths", False, str(e))
+        return
+    roots = lp.get("roots", [])
+    builtin = [r for r in roots if r.get("source") == "builtin"]
+    rep.add("custom_library", "builtin_root", bool(builtin) and builtin[0].get("graphs", 0) > 0,
+            "{} graphs".format(builtin[0].get("graphs")) if builtin else "no builtin root")
+    custom = [r for r in roots if r.get("source") != "builtin" and r.get("enabled")
+              and r.get("exists") and r.get("sbs_files")]
+    if not custom:
+        rep.add("custom_library", "custom_roots", True, "no custom library folder with .sbs files")
+        return
+    rep.add("custom_library", "custom_roots", True, "; ".join(
+        "{} ({}, {} graphs)".format(r["path"], r["source"], r.get("graphs")) for r in custom))
+    offset, fails, total = 0, [], 0
+    while offset is not None:
+        r = sd.call("validate_library", offset=offset, limit=60, source="custom")
+        total = r["total_visible"]
+        fails += r["failed"]
+        offset = r["next_offset"]
+    for f in fails:
+        rep.add("custom_library", f["identifier"], False, f["error"])
+    rep.add("custom_library", "visible_graphs_instantiate", not fails,
+            "{} of {} failed".format(len(fails), total) if fails else "{} checked".format(total))
 
 
 def main(argv=None):

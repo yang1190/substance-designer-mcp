@@ -44,6 +44,10 @@ class CommandHandler(SDContextMixin, LibraryMixin, SceneToolsMixin, NodeToolsMix
             "duplicate_node":         self.duplicate_node,
             "get_node_info":          self.get_node_info,
             "get_library_nodes":      self.get_library_nodes,
+            "list_library_paths":     self.list_library_paths,
+            "add_library_path":       self.add_library_path,
+            "remove_library_path":    self.remove_library_path,
+            "rescan_library":         self.rescan_library,
             "connect_nodes":          self.connect_nodes,
             "disconnect_nodes":       self.disconnect_nodes,
             "set_parameter":          self.set_parameter,
@@ -74,6 +78,10 @@ class CommandHandler(SDContextMixin, LibraryMixin, SceneToolsMixin, NodeToolsMix
         self._lib_url_cache = {}  # lower-case keyword -> exact library identifier
         self._lib_file_index = None  # identifier -> [.sbs paths], built lazily
         self._lib_hidden = set()     # {(identifier, path)} marked hideInLibrary
+        self._fn_file_index = None   # function identifier -> [.sbs paths]
+        self._fn_hidden = set()
+        self._lib_meta = {}          # (kind, identifier, path) -> label/category/...
+        self._lib_file_info = {}     # path -> {"source", "root"}
 
     def dispatch(self, cmd_type, params):
         handler = self.HANDLERS.get(cmd_type)

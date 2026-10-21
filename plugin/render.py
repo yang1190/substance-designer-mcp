@@ -148,7 +148,7 @@ def _encode_png(w, h, channels, rows, normalize=False):
 
 class RenderMixin(object):
     """Mixed into CommandHandler. Relies on _resolve_graph, _pkg_mgr,
-    _graph_material_model, _new_library_node, _lib_index, _lib_hidden."""
+    _graph_material_model, _new_library_node, _lib_index, _lib_hidden, _lib_source."""
 
     # ── helpers ────────────────────────────────────────────────────────────
     def _output_nodes(self, graph, output_ids=None):
@@ -274,18 +274,33 @@ class RenderMixin(object):
         return {"graph": graph.getIdentifier(), "directory": directory.replace("\\", "/"),
                 "written": written, "errors": errors}
 
-    def validate_library(self, offset=0, limit=150, filter_text=""):
+    def validate_library(self, offset=0, limit=150, filter_text="", source="all"):
         """Instantiate visible Library graphs in a throw-away package to check
         that library resolution works (run in batches: offset/limit). Returns
-        failures and 'next_offset' (None when done)."""
+        failures and 'next_offset' (None when done).
+        source: all | builtin | custom (graphs from custom Library folders)."""
         idx = self._lib_index()
         ft = (filter_text or "").lower()
-        names = sorted(k for k in idx
-                       if any((k, f) not in self._lib_hidden for f in idx[k])
-                       and (not ft or ft in k.lower()))
+        source = (source or "all").lower()
+
+        def wanted(k):
+            files = [f for f in idx[k] if (k, f) not in self._lib_hidden]
+            if source == "builtin":
+                files = [f for f in files if self._lib_source(f) == "builtin"]
+            elif source == "custom":
+                files = [f for f in files if self._lib_source(f) != "builtin"]
+            return bool(files) and (not ft or ft in k.lower())
+        names = sorted(k for k in idx if wanted(k))
+        if source == "custom":
+            # address custom graphs explicitly: built-in wins on collisions
+            names = [k if all(self._lib_source(f) != "builtin" for f in idx[k]) else
+                     "{}#{}".format(next(f for f in idx[k] if self._lib_source(f) != "builtin"), k)
+                     for k in names]
         batch = names[offset:offset + limit]
         from sd.api.sbs.sdsbscompgraph import SDSBSCompGraph
         pm = self._pkg_mgr()
+        before = {(p.getFilePath() or "").replace("\\", "/").lower()
+                  for p in pm.getUserPackages()}
         tmp = pm.newUserPackage()
         ok, failed = 0, []
         t0 = time.time()
@@ -305,9 +320,12 @@ class RenderMixin(object):
             except SDError:
                 pass
             # drop library packages that ended up as user packages
+            lib_files = {f.lower() for f in getattr(self, "_lib_file_info", {})}
             for p in list(pm.getUserPackages()):
                 fp = (p.getFilePath() or "").replace("\\", "/")
-                if "/resources/packages/" in fp:
+                if fp.lower() in before:
+                    continue  # opened by the user: never touch
+                if "/resources/packages/" in fp or fp.lower() in lib_files:
                     try:
                         pm.unloadUserPackage(p)
                     except SDError:

@@ -1475,6 +1475,31 @@ CONCEPTS = {
             "Shape splatter v2 SDF shapes: set sdf_bounding_frame_size (Rusty bolts sample: [0.6,0.6,1])",
         ],
     },
+    "custom_library": {
+        "name": "Custom Library folders (.sbs packages outside SD's install)",
+        "description": (
+            "Besides <SD>/resources/packages the plugin indexes every custom Library "
+            "folder, so graphs from your own / third-party .sbs packages work like "
+            "built-in nodes in create_instance_node, batch library_keyword and recipes."
+        ),
+        "key_facts": [
+            "Sources: SD's own Library watched paths (Preferences > Projects > Library, read "
+            "from <LOCALAPPDATA>/Adobe/Adobe Substance 3D Designer/<ver>/user_project.sbsprj), "
+            "add_library_path (persistent JSON in .../Adobe Substance 3D Designer/sd_mcp/), "
+            "and the SD_MCP_LIBRARY_PATHS env var (append '*' for recursive)",
+            "list_library_paths shows every scanned folder with source, recursion and counts; "
+            "rescan_library forces a re-index (changes are detected automatically within ~2 s)",
+            "get_library_nodes(source='custom') lists custom graphs with label, category, "
+            "description, path; filter_text also matches labels/categories ('Tom Jacobs')",
+            "A graph can be referenced by identifier ('FloodFills'), Library label ('Flood Fills') "
+            "or qualified 'File.sbs#identifier' / 'D:/libs/x.sbs#identifier'",
+            "On identifier collisions the visible, built-in graph wins; the custom one gets a "
+            "qualified URL ('PushEdgesCopy.sbs#PushEdges', field shadowed_by)",
+            "Saved packages reference custom dependencies by RELATIVE path (SD default "
+            "'path storage: relative'): keep the library folder at a fixed location",
+            "remove_library_path on a folder from SD's settings only makes the plugin ignore it",
+        ],
+    },
     "substance_graph": {
         "name": "Substance Graph (SBS Compositing Graph)",
         "description": (

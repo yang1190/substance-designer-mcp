@@ -4,6 +4,38 @@ All notable changes to the Substance Designer MCP Plugin are documented here.
 
 ---
 
+## [1.7.0] — 2026-10-21 — Custom Library folders
+
+### Plugin (v3.10.0)
+- **Custom Library folders are indexed** next to `<SD>/resources/packages`, so graphs from your own / third-party `.sbs` packages work everywhere a library node is accepted (`create_instance_node`, batch `library_keyword` / `resource_url`, recipes). New module `plugin/library_paths.py` (pure Python, unit-tested offline) collects the folders from:
+  - SD's own Library watched paths (*Preferences > Projects > Library*), parsed from `%LOCALAPPDATA%/Adobe/Adobe Substance 3D Designer/<major.minor>/user_project.sbsprj`, `default_project.sbsprj` and projects listed in `default_configuration.sbscfg` — `isrecursive`, `isenabled`, exclude patterns and URL aliases (`sbs://`, custom aliases, `$(PROJECT_DIR)`) are honoured. A folder added in SD is used automatically
+  - a persistent plugin config `%LOCALAPPDATA%/Adobe/Adobe Substance 3D Designer/sd_mcp/library_paths.json` (outside the plugin folder and not tied to an SD version: survives plugin updates and SD upgrades)
+  - the `SD_MCP_LIBRARY_PATHS` environment variable (`*` suffix = recursive)
+- New commands / tools: `list_library_paths`, `add_library_path(path, recursive, label)`, `remove_library_path` (a folder from SD's settings is ignored instead; SD's files are never modified), `rescan_library`
+- `get_library_nodes`: `source` filter (all / builtin / custom / loaded), `include_hidden`; filter text also matches Library label, category and tags; custom entries carry label, category, author, description, path and library root
+- References: identifier (`FloodFills`), Library label (`Flood Fills`), or qualified `File.sbs#identifier` / `D:/libs/x.sbs#identifier` (any .sbs, even outside library folders)
+- Collision rules: the visible built-in graph wins; a shadowed custom copy is listed with a qualified URL (`shadowed_by`). Prefix / substring keyword matching prefers built-in graphs, so adding a library never changes what the recipes resolve to (checked: the 22 recipe library keywords resolve identically)
+- Changes on disk are detected automatically (new / edited `.sbs`, plugin config, SD project files; checked at most every 2 s); unchanged files are not re-read. Full index of 528 files: ~0.35 s
+- Graph and function indexes now share one scan. Hidden detection reads only the graph's own `<attributes>` block — two built-in functions without attributes (`lexicographic_greater_than_vec2`, `argmax_float2_mask`) were wrongly marked hidden because a parameter's `hideInLibrary` leaked in
+- `validate_library(source=...)`; its cleanup never unloads packages the user had open
+- `diagnostic` lists every enabled library root
+
+### Bridge Server (v2.3.0)
+- Tools `list_library_paths`, `add_library_path`, `remove_library_path`, `rescan_library` (44 tools); `get_library_nodes` gains `source` / `include_hidden`; `validate_library` gains `source`
+
+### Tests
+- `test_offline.py`: 5 new tests (SD `.sbsprj` parsing with aliases and exclude patterns, version folder selection, plugin config round trip, env var, recursive scan, `.sbs` header parsing, qualified references) — 13 tests
+- `run_regression.py`: new `custom_library` section (built-in root indexed; every visible graph of every custom folder instantiates)
+
+### Verified on SD 16.0.5 with the Tom Jacobs CustomLibrary
+- Built-in index identical to 3.9.0 (808 identifiers, same files, same hidden set, same preferred file for every identifier); 13 custom identifiers added
+- Flood Fills, Shift Rocks, Add To Ground, Edge Variation, Push Edges, Rock Shelter 001, Rock Sharp 001, Simple Outputs instantiate by identifier, label and qualified reference; a test graph (Rock Sharp → Flood Fills / Push Edges, Rock Shelter colour) renders non-flat outputs
+- A saved package references the custom packages by relative path (`../../../Documents/.../CustomLibrary/FloodFills.sbs`) — keep the library at a fixed location
+- add / remove / ignore / auto re-index checked live
+- Offline tests 13/13; full regression after deploying 3.10.0: **102 pass, 0 fail** (library sweep 499 graphs = 491 built-in + 8 custom; new custom_library section 3/3)
+
+---
+
 ## [1.6.0] — 2026-10-20 — Code reorganisation
 
 ### Plugin (v3.9.0) — no behaviour change

@@ -260,7 +260,9 @@ class SceneToolsMixin(object):
         results["library_cache_entries"] = len(self._lib_url_cache)
         try:
             results["library_index_graphs"] = len(self._lib_index())
-            results["library_dirs"] = self._lib_packages_dirs()
+            results["library_dirs"] = [
+                {"path": r["path"], "source": r["source"], "graphs": r.get("graphs")}
+                for r in self.list_library_paths()["roots"] if r.get("enabled")]
         except SDError as e:
             results["library_index_error"] = str(e)
 

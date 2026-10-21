@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-sd_mcp_bridge.py - Substance Designer MCP Bridge v2.2.0
+sd_mcp_bridge.py - Substance Designer MCP Bridge v2.3.0
 
 Relay between Claude (stdio/FastMCP) and the SD plugin (TCP).
 
@@ -198,7 +198,7 @@ async def _async_send(cmd_type: str, params: dict = None) -> str:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def _lifespan(app: FastMCP):
-    logger.info(f"Substance Designer MCP Bridge v2.2.0 -> SD plugin on port {_sd_port}")
+    logger.info(f"Substance Designer MCP Bridge v2.3.0 -> SD plugin on port {_sd_port}")
     logger.info("Ensure Substance Designer is running with the MCP plugin loaded.")
     yield {}
     logger.info("Substance Designer MCP bridge shutting down.")
@@ -374,6 +374,9 @@ async def create_instance_node(ctx: Context,
     - resource_url: library graph identifier or URL, e.g. 'clouds_2',
       'pkg:///clouds_2' or a full 'pkg:///x?dependency=N' URL. The plugin loads
       the current (non-legacy) library package from SD's resources on demand.
+      Custom Library graphs work the same way ('FloodFills', its label
+      'Flood Fills', or qualified 'FloodFills.sbs#FloodFills' /
+      'D:/libs/rocks.sbs#rock_a' to pick a specific package file).
     - graph_identifier: target graph (None = current)
     - position: [x, y]
 
@@ -628,13 +631,24 @@ async def save_package(ctx: Context,
 @mcp.tool()
 async def get_library_nodes(ctx: Context,
                             filter_text: str = "",
-                            limit: int = 200) -> str:
+                            limit: int = 200,
+                            source: str = "all",
+                            include_hidden: bool = True) -> str:
     """
-    Search Substance Designer's built-in library (<SD>/resources/packages) and
-    graphs in loaded packages. Returns portable 'pkg:///<identifier>' URLs for
-    create_instance_node / batch "resource_url" / "library_keyword".
-    - filter_text: search filter (e.g. 'cell', 'perlin', 'noise', 'grunge', 'polygon')
-    - limit: max results
+    Search Substance Designer's built-in library (<SD>/resources/packages),
+    custom Library folders (SD's Preferences > Library watched paths, folders
+    added with add_library_path, SD_MCP_LIBRARY_PATHS) and graphs in loaded
+    packages. Returns URLs for create_instance_node / batch "resource_url" /
+    "library_keyword".
+    - filter_text: matches identifier, Library label, category or tags
+      (e.g. 'cell', 'perlin', 'grunge', 'Tom Jacobs', 'flood')
+    - source: all | builtin | custom | loaded
+    - include_hidden: False hides internal graphs (hideInLibrary)
+
+    Custom entries carry label, category, description, path and library_root.
+    URLs are 'pkg:///<identifier>'; a custom graph whose identifier also exists
+    in the built-in library gets a qualified URL 'File.sbs#identifier'
+    (otherwise the built-in graph wins).
 
     After getting a URL, use create_instance_node(resource_url=url) to add it,
     then get_node_info(node_id) to discover its port IDs before connecting.
@@ -642,7 +656,56 @@ async def get_library_nodes(ctx: Context,
     return await _async_send("get_library_nodes", {
         "filter_text": filter_text,
         "limit": limit,
+        "source": source,
+        "include_hidden": include_hidden,
     })
+
+
+@mcp.tool()
+async def list_library_paths(ctx: Context) -> str:
+    """
+    List every folder scanned for .sbs library packages: the built-in library,
+    SD's own Library watched paths (read from SD's user_project.sbsprj /
+    default_project.sbsprj, so folders added in SD's Preferences are used
+    automatically), folders added with add_library_path and the
+    SD_MCP_LIBRARY_PATHS environment variable. Shows source, recursion,
+    existence and the number of packages / graphs found in each.
+    """
+    return await _async_send("list_library_paths")
+
+
+@mcp.tool()
+async def add_library_path(ctx: Context, path: str, recursive: bool = True,
+                           label: str = "") -> str:
+    """
+    Permanently add a folder of .sbs packages to the plugin's library search
+    (stored in <LOCALAPPDATA>/Adobe/Adobe Substance 3D Designer/sd_mcp/
+    library_paths.json - survives SD restarts, plugin updates and SD upgrades).
+    Its graphs then work everywhere a library node is accepted
+    (create_instance_node, batch "library_keyword", recipes). SD's own Library
+    panel is not changed (add the folder in SD's Preferences for that).
+    """
+    return await _async_send("add_library_path", {
+        "path": path, "recursive": recursive, "label": label})
+
+
+@mcp.tool()
+async def remove_library_path(ctx: Context, path: str) -> str:
+    """
+    Remove a folder added with add_library_path. A folder that comes from SD's
+    own Library settings is ignored by the plugin instead (SD is not changed;
+    add_library_path re-enables it).
+    """
+    return await _async_send("remove_library_path", {"path": path})
+
+
+@mcp.tool()
+async def rescan_library(ctx: Context) -> str:
+    """
+    Re-index all library folders now. Normally not needed: new or edited .sbs
+    files in custom folders are detected automatically within a few seconds.
+    """
+    return await _async_send("rescan_library")
 
 
 @mcp.tool()
@@ -1134,14 +1197,16 @@ async def export_outputs(ctx: Context,
 
 @mcp.tool()
 async def validate_library(ctx: Context, offset: int = 0, limit: int = 150,
-                           filter_text: str = "") -> str:
+                           filter_text: str = "", source: str = "all") -> str:
     """
     Health check after an SD update: instantiate the graphs visible in SD's
     Library (batch with offset/limit; continue with next_offset until null)
     in a throw-away package and report the ones that fail.
+    source: all | builtin | custom (graphs from custom Library folders).
     """
     return await _async_send("validate_library", {
-        "offset": offset, "limit": limit, "filter_text": filter_text})
+        "offset": offset, "limit": limit, "filter_text": filter_text,
+        "source": source})
 
 
 @mcp.tool()
@@ -1172,13 +1237,13 @@ async def list_material_models(ctx: Context) -> str:
 def main():
     global _sd_port
 
-    parser = argparse.ArgumentParser(description="Substance Designer MCP Bridge v2.2.0")
+    parser = argparse.ArgumentParser(description="Substance Designer MCP Bridge v2.3.0")
     parser.add_argument("--port", type=int, default=9881,  # BUG-B03 fix: default is 9881
                         help="TCP port to connect to the SD plugin (default: 9881)")
     args = parser.parse_args()
     _sd_port = args.port
 
-    logger.info(f"SD MCP Bridge v2.2.0 -> SD plugin on port {_sd_port}")
+    logger.info(f"SD MCP Bridge v2.3.0 -> SD plugin on port {_sd_port}")
     mcp.run()
 
 

@@ -47,7 +47,7 @@ except SDError:  # pragma: no cover
 
 DEFAULT_PORTS     = [9881]
 
-PLUGIN_VERSION    = (3, 9, 0)
+PLUGIN_VERSION    = (3, 10, 0)
 
 HEADER_SIZE       = 4
 
