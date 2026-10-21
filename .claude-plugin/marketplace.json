@@ -11,7 +11,7 @@
     {
       "name": "sd-material-skills",
       "source": "./",
-      "description": "SD material workflow, material recipes and node techniques (Chinese)",
+      "description": "SD material workflow, material recipes and node techniques",
       "version": "1.0.0",
       "category": "design"
     }

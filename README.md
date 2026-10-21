@@ -44,7 +44,7 @@ Tested on **Substance 3D Designer 16.0.5** (Python 3.13, PySide6 6.8); SD 15.x r
 - Knowledge base: Shape splatter v2 + mappers, Grid atlas, Angle to vector, 3D viewer, function-graph and SDF conventions.
 
 **Claude skills for material work**
-- [`skills/`](skills/README.md): three Agent Skills (Chinese) — production workflow, recipes by material type, node techniques by stage — installable as the `sd-material-skills` Claude Code plugin. See [Claude Skills](#claude-skills).
+- [`skills/`](skills/README.md): three Agent Skills — production workflow, recipes by material type, node techniques by stage — installable as the `sd-material-skills` Claude Code plugin. See [Claude Skills](#claude-skills).
 
 **Validation on 16.0.5**: 79/79 material recipes and 8/8 heightmap styles build with 0 node and 0 connection failures; SDF scenes, SDF rock scattering and pixel processor functions render correctly.
 
@@ -275,7 +275,7 @@ create_instance_node(resource_url="D:/libs/rocks.sbs#rock_a")  # any .sbs, even 
 
 ## Claude Skills
 
-The repo is also a Claude Code plugin marketplace with one plugin, **`sd-material-skills`**: three Agent Skills (written in Chinese) distilled from building ~20 procedural PBR materials with this MCP server.
+The repo is also a Claude Code plugin marketplace with one plugin, **`sd-material-skills`**: three Agent Skills distilled from building ~20 procedural PBR materials with this MCP server.
 
 | Skill | Trigger | Contents |
 |---|---|---|

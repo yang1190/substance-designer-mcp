@@ -1,6 +1,6 @@
 # SD Material Skills
 
-Three Agent Skills (written in Chinese) distilled from a personal Substance 3D Designer project
+Three Agent Skills distilled from a personal Substance 3D Designer project
 (`SD_Textures`: ~20 procedural PBR materials and node-flow breakdowns of third-party .sbs files).
 They are meant to be used together with this repo's MCP server.
 
@@ -13,8 +13,8 @@ They are meant to be used together with this repo's MCP server.
 Core principles baked in: every map is derived from the final height; pebbles / shards / weeds are
 built as a single heightmap first and then scattered with Tile Sampler (or Shape Splatter) inside a mask.
 
-> File paths (`E:/Work/PersonalProject/SD_Textures/...`) and `claude/sd-*.md` doc references point to the
-> author's own project. The techniques, parameters and pitfalls are general; replace the paths with your own.
+> File paths (`E:/Work/PersonalProject/SD_Textures/...`), the `*_节点流程.md` (node flow) breakdown files and the
+> `claude/sd-*.md` doc references point to the author's own project. The techniques, parameters and pitfalls are general; replace the paths with your own.
 
 ## Install
 

@@ -1,166 +1,166 @@
 ---
 name: sd-material-recipes
-description: 按材质类别选 Substance Designer 配方——碎石地、卵石滩、沙漠、岩壁悬崖、板岩层理、砖石瓷砖石板路、森林地面苔藓水洼、血肉有机，给出骨架、参数起点与参考文件。
+description: Pick a Substance Designer recipe by material type - rocky ground, pebble beach, desert, fractured cliff, slate strata, tiles / mosaic / cobblestone, forest floor with moss and puddles, organic flesh - with pipelines, starting parameters and reference files.
 ---
 
-# SD 材质配方库（按材质类别）
+# SD Material Recipes (by material category)
 
-先按类别找到配方，再去读参考文件拿细节。制作流程、脚本框架、踩坑见 sd-material-workflow；单个技巧的做法见 sd-node-techniques。
+Find the recipe by category first, then read the reference files for details. Workflow, script framework and pitfalls are in sd-material-workflow; individual techniques are in sd-node-techniques.
 
-参考文件位置：
-- 项目文档：project_read claude/sd-*.md（下文写作 [doc:名字]）
-- 本地拆解：E:/Work/PersonalProject/SD_Textures 下各 sbs 旁的 *_节点流程.md（下文写作 [md:路径]）
+Where the references live:
+- Project docs: project_read claude/sd-*.md (written below as [doc:name])
+- Local breakdowns: the *_节点流程.md (node flow) files next to each .sbs under E:/Work/PersonalProject/SD_Textures (written below as [md:path])
 
-## 类别索引
+## Category index
 
-| 类别 | 关键词 | 首选方案 | 最佳参考 |
+| Category | Keywords | Preferred approach | Best references |
 |---|---|---|---|
-| 1 碎石地 / 岩石地面 | rocky ground、rubble、gravel、碎石、山地碎石 | 1A 单体 + 多层 Tile Sampler，或 1B SDF Shape Splatter | Desert_Rocky_Ground_01、StoneGroundA、Rocky_Ground_A |
-| 2 密铺碎石 / 骨料 | concrete aggregate、碎石场、砾石层 | Cells + 膨胀 | ConcreteRockField |
-| 3 卵石滩 / 河滩 / 沙滩岩石 | pebbles、river bed、beach | 6 层 Tile Sampler + 泥 + 水 | RiverPebbles、Beach_Rocky_Ground_A/B/C |
-| 4 沙漠 / 沙地 / 基岩 | desert、bedrock、dune、沙纹 | 岩板单体 + Quantize 层理 + 沙地 | DesertRock_Tutorial |
-| 5 断裂岩壁 / 悬崖 | cliff、fractured rock、节理 | 节理分块 + Flood Fill 屋脊 | RockCliff_A |
-| 6 层状岩 / 板岩 | slate、stratified、页岩 | 单块楔形 + 大 scale 固定角度 Tile Sampler | SlateCliffRock 14 |
-| 7 砖石 / 瓷砖 / 马赛克 / 石板路 | tile、mosaic、brick、cobblestone、flagstone | 规则网格 + 逐块随机值 + 勾缝 Height Blend | tile-04、HavanaStoneFloor、TileFloor、Cobblestone_01 |
-| 8 森林地面 / 植被 / 苔藓 / 水洼 | forest floor、moss、leaves、puddle、grass | 按通道分行 + 层遮罩 + Position Map | ForestMirror、ForestPuddleGround、Grass_Ground_A |
-| 9 有机 / 血肉 | guts、flesh、organic | 噪声 + 扭曲 + Slope Blur 自喂 | BloodyGuts |
+| 1 Rocky ground | rocky ground, rubble, gravel, mountain scree | 1A single shapes + layered Tile Sampler, or 1B SDF Shape Splatter | Desert_Rocky_Ground_01, StoneGroundA, Rocky_Ground_A |
+| 2 Dense rubble / aggregate | concrete aggregate, rubble field, gravel bed | Cells + dilation | ConcreteRockField |
+| 3 Pebble / river / beach rocks | pebbles, river bed, beach | 6-layer Tile Sampler + mud + water | RiverPebbles, Beach_Rocky_Ground_A/B/C |
+| 4 Desert / sand / bedrock | desert, bedrock, dune, sand ripples | slab shapes + Quantize strata + sand | DesertRock_Tutorial |
+| 5 Fractured cliff | cliff, fractured rock, joints | joint-based blocks + Flood Fill ridges | RockCliff_A |
+| 6 Stratified rock / slate | slate, stratified, shale | single wedge + large-scale fixed-angle Tile Sampler | SlateCliffRock 14 |
+| 7 Tiles / mosaic / brick / cobblestone | tile, mosaic, brick, cobblestone, flagstone | regular grid + per-cell random value + grout Height Blend | tile-04, HavanaStoneFloor, TileFloor, Cobblestone_01 |
+| 8 Forest floor / foliage / moss / puddles | forest floor, moss, leaves, puddle, grass | one row per channel + layer masks + Position Map | ForestMirror, ForestPuddleGround, Grass_Ground_A |
+| 9 Organic / flesh | guts, flesh, organic | noise + warps + self-fed Slope Blur | BloodyGuts |
 
 ---
 
-## 1 碎石地 / 岩石地面
+## 1 Rocky ground
 
-### 1A 单体 + 多层 Tile Sampler（项目偏好的标准做法）
-参考：[md:Desert_Rocky_Ground_01/Desert_Rocky_Ground_01_节点流程.md]、[doc:sd-rocky-ground-a]、[doc:sd-beach-rocky-ground-c]
+### 1A Single shapes + layered Tile Sampler (the project's standard approach)
+References: [md:Desert_Rocky_Ground_01/Desert_Rocky_Ground_01_节点流程.md], [doc:sd-rocky-ground-a], [doc:sd-beach-rocky-ground-c]
 ```
-单体石头 ×4–6 -> L1 大石 Tile Sampler -> L2 -> L3 -> L4（逐层只填空隙）
- -> 石面细节 -> 地面 Height Blend -> 地面再撒细碎石 -> H_final
+4–6 single rocks -> L1 large rocks Tile Sampler -> L2 -> L3 -> L4 (each layer fills only the gaps)
+ -> rock surface detail -> Height Blend with ground -> scatter fine gravel on the ground again -> H_final
 ```
-- 单体：Shape / Polygon 2 / Cube 3D 起形 -> Warp 打破轮廓 -> 3 个 Gradient Axial 或 Flood Fill to Gradient 连续 Min 切面 -> Edge Detect 圆角倒边
-- 层表起点（Desert_Rocky_Ground_01）：6×6（mask random 0.81，很稀）-> 20×20 -> 30×30 -> 125×125
-- 下一层 Scale Map = 上一层 HBAO 反相（靠近大石的更小），Mask Map = 上一层反相 Histogram Scan（只放空隙）
-- 合成：Height Blend 逐层（position 0.7–0.85）；小石先 Min 一个 Histogram Range 压低。或每层先 Levels 定绝对高度再 Max
-- Rocky_Ground_A 层表（grid / scale / 高度）：A 8 / 1.37 / 0.60，B 22 / 1.35 / 0.38，C 38 / 1.75 / 0.30，D 56 / 1.7 / 0.19，E 100 / 1.8 / 0.11；石头放在模糊地面 H_glow 上再减下沉量，与当前高度取 Max
-- 密度场：大石 = Clouds Histogram Scan；中小石 = max(大石邻近光晕 Blur, 成团噪声) × (1 - 上一层膨胀足迹)
+- Single rock: Shape / Polygon 2 / Cube 3D base -> Warp to break the outline -> 3 Gradient Axial or Flood Fill to Gradient chained with Min for facets -> Edge Detect with roundness to bevel
+- Starting layer table (Desert_Rocky_Ground_01): 6×6 (mask random 0.81, very sparse) -> 20×20 -> 30×30 -> 125×125
+- Next layer Scale Map = inverted HBAO of the previous layer (smaller rocks close to big ones); Mask Map = inverted Histogram Scan of the previous layer (gaps only)
+- Compose: Height Blend per layer (position 0.7–0.85); lower small rocks first with a Min against a Histogram Range. Or set absolute heights with Levels per layer, then Max
+- Rocky_Ground_A layer table (grid / scale / height): A 8 / 1.37 / 0.60, B 22 / 1.35 / 0.38, C 38 / 1.75 / 0.30, D 56 / 1.7 / 0.19, E 100 / 1.8 / 0.11; place rocks on the blurred ground H_glow, subtract the sink amount, Max with the current height
+- Density: large rocks = Clouds Histogram Scan; medium / small = max(halo around large rocks (Blur), clustered noise) × (1 - dilated footprint of the previous layer)
 
-### 1B SDF Shape Splatter v2（真实体积、石叠石）
-参考：[doc:sd-rocky-ground-a-sdf]、[doc:sd-stone-ground-a-mountain-rubble]（模板 StoneGroundA/_build/）
-- 每个 pass 的 background_height = 前面所有 pass 的合成；height_offset_from_background 1、slope_rotation 1、smooth_background_slope 0.4 -> 新石头落在旧石头上并顺坡
-- SDF：rock（facets 7–10，randomness 0.85–0.95）morph 少量椭球 + simplex；height_scale = 0.96 × hd × 9 / grid
-- 密度：大石只在地形顶带（t_band 0.5–0.85）× 成团噪声；后续层 = 前一层外环（Blur(R) - 顶面）∪ 噪声；碎石 = HBAO 缝隙 × 石头附近遮罩
-- 必做：轮廓抗锯齿（Blur HQ 强度 = K / $size.x，只在 |H - blur(H)| 边缘遮罩内替换）
-- 再加：Curvature 双尺度边缘崩口写进高度（-0.005）
+### 1B SDF Shape Splatter v2 (real volume, rocks on rocks)
+References: [doc:sd-rocky-ground-a-sdf], [doc:sd-stone-ground-a-mountain-rubble] (template StoneGroundA/_build/)
+- Each pass's background_height = composite of all previous passes; height_offset_from_background 1, slope_rotation 1, smooth_background_slope 0.4 -> new rocks land on older ones and follow the slope
+- SDF: rock (facets 7–10, randomness 0.85–0.95) morphed with a little ellipsoid + simplex; height_scale = 0.96 × hd × 9 / grid
+- Density: large rocks only on the terrain crest band (t_band 0.5–0.85) × clustered noise; later passes = ring around the previous pass (Blur(R) - tops) ∪ noise; gravel = HBAO crevices × near-rock mask
+- Required: outline anti-aliasing (Blur HQ intensity = K / $size.x, replaced only inside the |H - blur(H)| edge mask)
+- Extra: two-scale curvature edge chipping written into height (-0.005)
 
-### 1C Tom Jacobs Cells 链（快速出铺满碎石）
-参考：[doc:sd-80lv-rocky-ground-tom-jacobs]、[doc:sd-customlibrary-tom-jacobs-nodes]
+### 1C Tom Jacobs Cells chain (fast full-coverage rubble)
+References: [doc:sd-80lv-rocky-ground-tom-jacobs], [doc:sd-customlibrary-tom-jacobs-nodes]
 ```
 Cells 4 (scale 7) -> Edge Detect -> Flood Fills.rocks -> Shift Rocks.Rocks
-Cells 4 原图 -> Shift Rocks.RandomMASK；Cells 4 -> Edge Variation.heightmask
-Shift Rocks -> Add To Ground(Top, Bottom = 地面) -> Push Edges -> 出图
+raw Cells 4 -> Shift Rocks.RandomMASK; Cells 4 -> Edge Variation.heightmask
+Shift Rocks -> Add To Ground(Top, Bottom = ground) -> Push Edges -> maps
 ```
-- 缺点：Edge Detect 缝线会在石头边留细脊、石头像台地（StoneGroundA v1 已因此换 SDF）
+- Downside: Edge Detect seam lines leave thin ridges around rocks and rocks look like mesas (StoneGroundA v1 switched to SDF because of this)
 
-### 常见问题
-- 石头像埋在地里：宏观起伏 / 堆叠抬升吃掉了相对高度 -> 看 H - Blur(H)，减小下沉、提高侧壁（切面 rin 0.6 / rlo 0.4）
-- 碎石沿地面起伏排成蜂窝网格：地面中频太密 -> 地面平滑化，碎石密度限定在石头附近
-- 碎石像硬币 / 钢珠：Tile Sampler color 不压高度 -> 每层 Levels 控高度；小物体不要用 Slope Blur 充气（会变平台）
-- 石头太像原型：大石用 6 个专用剪影（不同边数、非等比拉伸、两条 Gradient Axial 直切边）
+### Common problems
+- Rocks look buried: macro relief / stacking lift ate the relative height -> measure H - Blur(H), reduce sinking, keep taller side walls (facet Levels in 0.6 / out low 0.4)
+- Gravel lines up in a honeycomb along ground undulations: ground mid frequencies too dense -> smooth the ground, restrict gravel density to the vicinity of rocks
+- Gravel looks like coins / steel balls: Tile Sampler color does not lower height -> Levels per layer; do not inflate small objects with Slope Blur (they turn into plateaus)
+- Rocks look too much like the prototype: use 6 dedicated silhouettes for large rocks (different side counts, non-uniform stretch, two straight Gradient Axial cuts)
 
-## 2 密铺碎石 / 骨料（ConcreteRockField）
-参考：[md:ConcreteRockField/ConcreteRockField_节点流程.md]（大量 MV 自定义节点，在 dependencies/）
-- 核心：一张逐格随机灰度的细胞图 -> DilationErosion360（距离 15、200 步）亮格压暗格 -> 自然得到层叠半埋
-- Edge Detect -> 腐蚀 2 -> 膨胀 2 闭合缝隙 -> StoneBlocks（Flatness 0.52）-> RemoveEdges -> MVCenter 中心隆起 -> PostSelectCells 把膨胀值 / 噪声按格取值做逐石高低
-- MultiChannelDirectionWarp 用同一组角度 / 强度同时扭曲高度和 3 张遮罩（颜色永远对齐）
-- SandAccumulationEffect：小半径平滑边缘，大半径 + 噪声倍增做积沙，输出积沙遮罩；积沙颜色 = 整图 Blur HQ 32
-- 内置库替代：Tile Sampler color_random + Max 混合，亮的在上并决定高度（Beach_Rocky_Ground_C 已用）
+## 2 Dense rubble / aggregate (ConcreteRockField)
+Reference: [md:ConcreteRockField/ConcreteRockField_节点流程.md] (many MV custom nodes in dependencies/)
+- Core: a cell map with a random gray per cell -> DilationErosion360 (distance 15, 200 steps), bright cells grow over dark cells -> natural layering and half-buried stones
+- Edge Detect -> erode 2 -> dilate 2 to close gaps -> StoneBlocks (Flatness 0.52) -> RemoveEdges -> MVCenter center bulge -> PostSelectCells samples the dilation value / noise per cell for per-stone height
+- MultiChannelDirectionWarp warps height and 3 masks with the same angle / strength (color always lines up)
+- SandAccumulationEffect: small radius smooths edges, large radius + noise multiplier accumulates sand and outputs a sand mask; sand color = whole-image Blur HQ 32
+- Built-in alternative: Tile Sampler color_random + Max blending, the brighter stone ends up on top and also sets the height (used in Beach_Rocky_Ground_C)
 
-## 3 卵石滩 / 河滩 / 沙滩岩石
-参考：[md:RiverPebbles/SBS/RiverPebbles_节点流程.md]、[doc:sd-beach-rocky-ground-a]、[doc:sd-beach-rocky-ground-b]
-- 单块卵石：Shape 圆 -> Perlin 驱动 Multi Directional Warp 39 -> 3 个 Flood Fill to Gradient Min -> Non-uniform Blur 5.9 磨圆 -> Crop 拆 4 块
-- 6 层 Tile Sampler：8² / 14² / 22² / 40² / 60² / 80²，Mask Map = 上一层 Histogram Scan -> Bevel -> 反相（Bevel 距离 = 石间距）；Scale Map 和 Color Map 共用一张 Moisture（成片分布）
-- 泥：Height Blend（top 泥、bottom 卵石，position 0.14）-> 卵石半埋，mask 输出即泥地遮罩
-- 水：PBR Base Material 打包 -> Water Level（水位做成图参数）；水下石头 = 原底色 Blur + HSL 压暗，以 水面区域 × 高度 为 opacity 透出
-- 沙滩：沙堆在石头底部 = Blur HQ 9(石头) -> Levels 0–0.34 × Clouds -> Max 沙面；沙上碎石 Add 到沙面上（不要切进沙里）；接触线带内用模糊高度 Copy 0.8 柔化
-- 模糊版叠硬版本要用 Min，不用 Copy（否则轮廓外一圈裙边）
+## 3 Pebble / river / beach rocks
+References: [md:RiverPebbles/SBS/RiverPebbles_节点流程.md], [doc:sd-beach-rocky-ground-a], [doc:sd-beach-rocky-ground-b]
+- Single pebble: circle Shape -> Perlin-driven Multi Directional Warp 39 -> 3 Flood Fill to Gradient with Min -> Non-uniform Blur 5.9 to round it -> Crop into 4 pebbles
+- 6 Tile Sampler layers: 8² / 14² / 22² / 40² / 60² / 80², Mask Map = previous layer Histogram Scan -> Bevel -> invert (Bevel distance = spacing between stones); Scale Map and Color Map share one Moisture noise (patchy distribution)
+- Mud: Height Blend (top mud, bottom pebbles, position 0.14) -> pebbles half buried, the mask output is the mud mask
+- Water: pack with PBR Base Material -> Water Level (water level exposed as a graph parameter); underwater stones = original base color blurred + darkened with HSL, shown through with water area × height as opacity
+- Beach: sand piles at rock bases = Blur HQ 9(rocks) -> Levels 0–0.34 × Clouds -> Max with the sand surface; gravel on sand is Added on top of the sand (not cut into it); soften the contact band by Copying the blurred height at 0.8
+- Lay a blurred version over a hard one with Min, not Copy (Copy leaves a skirt around the outline)
 
-## 4 沙漠 / 沙地 / 基岩
-参考：[md:Daniel Thiger - Tutorial Desert Bedrock（Substance Designer 沙漠基岩制作教程）/DesertRock_Tutorial_节点流程.md]、[doc:sd-desert-bedrock-tutorial-breakdown]
+## 4 Desert / sand / bedrock
+References: [md:Daniel Thiger - Tutorial Desert Bedrock（Substance Designer 沙漠基岩制作教程）/DesertRock_Tutorial_节点流程.md], [doc:sd-desert-bedrock-tutorial-breakdown]
 ```
-岩板单体（Cells + Polygon -> 两次 Slope Blur Max）-> Tile Sampler 4×4 -> Directional Warp
- -> Quantize 8 阶台地 -> 裂纹 -> Quantize 51 阶细层理（只在受光面）
- -> 沙地（低处阈值 + Non-uniform Blur 拉风向）-> 沙纹 -> 碎石（MG Dust 遮罩）-> 柔化沙地
+slab shape (Cells + Polygon -> two Slope Blur Max) -> Tile Sampler 4×4 -> Directional Warp
+ -> Quantize 8 steps (terraces) -> cracks -> Quantize 51 steps fine strata (lit faces only)
+ -> sand (low-area threshold + Non-uniform Blur for wind direction) -> ripples -> pebbles (MG Dust mask) -> soften sand
 ```
-- 沙纹：两个 Gaussian Tile Sampler 互相 Directional Warp + Curve；用沙地形状的 Gradient 做 Vector Warp（强度 -0.01）让沙纹顺沙堆弯
-- 碎石推开沙子：以碎石遮罩为 Effect 的 Non-uniform Blur，再 Add 碎石
-- 沙粒闪光：White Noise 原图 + 旋转 ±90° RGBA Merge 成随机法线，只放在稀疏点和沙地，粗糙度同步降低
-- 岩面细节法线用 RT Bent Normal，沙地区域换平面法线
-- 沙漠碎石地（红褐沙 + 多级碎石）用 1A 方案 + Desert_Rocky_Ground_01 的沙地：用石头高度驱动沙地 Directional Warp（沙被石头推开）
+- Ripples: two Gaussian Tile Samplers Directional-Warping each other + Curve; Vector Warp with the Gradient of the sand shape (strength -0.01) bends ripples along the sand pockets
+- Pebbles push the sand away: Non-uniform Blur with the pebble mask as Effect, then Add the pebbles
+- Sand sparkles: White Noise plus copies rotated ±90° RGBA-merged into a random normal, only on sparse points and sand, with roughness lowered there
+- Rock detail normal from RT Bent Normal; sand areas switch to a flat normal
+- Desert rocky ground (red-brown sand + multi-size gravel): use 1A plus the Desert_Rocky_Ground_01 sand: rock height drives the sand's Directional Warp (sand pushed away by rocks)
 
-## 5 断裂岩壁 / 悬崖
-参考：[md:Rocks_A/RockCliff_A_节点流程.md]、[doc:sd-rockcliff-a-whitemodel]、[doc:sd-rock-cliff-a]、[doc:sd-rocks-a-fractured-cliff]
+## 5 Fractured cliff
+References: [md:Rocks_A/RockCliff_A_节点流程.md], [doc:sd-rockcliff-a-whitemodel], [doc:sd-rock-cliff-a], [doc:sd-rocks-a-fractured-cliff]
 ```
-1 节理：6 个 Tile Sampler 细长 Pyramid（3 方向 × 粗细）+ Voronoi 大裂隙 + 局部细分 -> Flood Fill（约 1400 块）
-2 岩板：随机高度 + 倾斜（angle_input 接大噪声、angle variation 0.15）+ 3 向屋脊（3 个 FF to Gradient Min）× BBox -> 刻真实块边界 -> 发丝裂纹 -> 抬到 0.5–0.98 × 岩体分区
-3 碎石：岩体 Blur 填充面 + 5 尺度 Voronoi 碎块，只在岩体以外
-4 合成：Crystal 凿面 -> 两次 Warp -> Slope Blur Min（<= 0.02）-> Max 碎石 -> 微细节 -> Blur 18 + Max 地板
+1 Joints: 6 Tile Samplers with thin Pyramids (3 directions × coarse/fine) + Voronoi large fissures + local subdivision -> Flood Fill (~1400 blocks)
+2 Plates: random height + tilt (angle_input from large noise, angle variation 0.15) + 3-way ridges (3 FF to Gradient with Min) × BBox -> engrave real block borders -> hairline cracks -> lift to 0.5–0.98 × rock-mass zones
+3 Rubble: blurred rock mass as fill surface + 5-scale Voronoi fragments, only outside the rock mass
+4 Compose: Crystal chiselling -> two Warps -> Slope Blur Min (<= 0.02) -> Max rubble -> micro detail -> Blur 18 + Max floor
 ```
-- 节理 rotation_map 接 Clouds（multiplier 0.039）-> 缓慢偏转；分区按整块决定（Flood Fill to Grayscale + 极窄阈值）
-- 坑：基于节理线的 Distance / 肩部效果会在死胡同线两侧生成成对的蠕虫凸脊 -> 只用基于每块随机值的 Edge Detect（真实边界）
-- 坑：倾斜岩面上 Slope Blur > 0.02 会拉出平行条纹；大面积 Max 填平要叠碎石，否则是平滑空地
-- 颜色参考：均值 sRGB (138,123,110)；深缝暖且饱和 (69,57,48)，凸棱偏白 (196,182,167)
-- 若要符合偏好：碎石可改 单块棱角碎石 -> Tile Sampler（Mask Map = 岩体反相）
+- Joint rotation_map from Clouds (multiplier 0.039) -> joints drift slowly; zones are decided per whole block (Flood Fill to Grayscale + very narrow threshold)
+- Pitfall: Distance / shoulder effects based on joint lines create pairs of worm-like ridges on both sides of dead-end lines -> use only Edge Detect on per-block random values (real borders)
+- Pitfall: Slope Blur > 0.02 on tilted rock faces drags out parallel streaks; large Max fills need rubble on top, otherwise they read as smooth empty patches
+- Color reference: mean sRGB (138,123,110); deep cracks warm and saturated (69,57,48), ridges whitish (196,182,167)
+- To match the preferences: replace rubble with a single angular fragment -> Tile Sampler (Mask Map = inverted rock mass)
 
-## 6 层状岩 / 板岩
-参考：[doc:sd-slatecliffrock-14-breakdown]、[doc:sd-stratified-rock-material]
-- 单块楔形：Polygon 2 -> Quad Transform -> 旋转 46° -> × Gradient Linear
-- Tile Sampler 13×13，scale 36（远大于格子，大量重叠），rotation 固定 0.857、random 0.03 -> 层理；Scale / Color / Distribution Map 共用一张 Gaussian Noise
-- 拉伸剪切的 Crystal 相减 -> 同方向长刻痕；多级 Directional Warp 让层理弯折；Slope Blur Min 后接 Max 出块面
-- 两个尺度 Cells 3 -> Edge Detect -> Bevel -> Slope Blur 做碎裂板块，Clouds 遮罩局部叠加
-- 颜色主要来自最终曲率；铁锈纹 = 曲率极窄 Histogram Select（range 约 0.04）；Roughness = BaseColor 反相 Levels
-- 简版层状岩：Tile Sampler（Gradation，3×9，旋转 0.95）+ 方向运动模糊收端头
+## 6 Stratified rock / slate
+References: [doc:sd-slatecliffrock-14-breakdown], [doc:sd-stratified-rock-material]
+- Single wedge: Polygon 2 -> Quad Transform -> rotate 46° -> × Gradient Linear
+- Tile Sampler 13×13, scale 36 (much larger than a cell, heavy overlap), rotation fixed at 0.857 with random 0.03 -> strata; Scale / Color / Distribution Map share one Gaussian Noise
+- Subtract a stretched, sheared Crystal -> long parallel grooves; chained Directional Warps bend the strata; Slope Blur Min followed by Max gives block faces
+- Two scales of Cells 3 -> Edge Detect -> Bevel -> Slope Blur for broken plates, added locally through a Clouds mask
+- Color mostly from final curvature; rust veins = very narrow Histogram Select on curvature (range ~0.04); Roughness = inverted BaseColor with Levels
+- Simple stratified rock: Tile Sampler (Gradation, 3×9, rotation 0.95) + directional motion blur to shorten plate ends
 
-## 7 砖石 / 瓷砖 / 马赛克 / 石板路
-参考：[md:TileSet/tile-04_节点流程.md]、[doc:sd-havana-stone-floor]、[doc:sd-tilefloor-broken-inlay]、[doc:sd-cobblestone-01-breakdown]
+## 7 Tiles / mosaic / brick / cobblestone
+References: [md:TileSet/tile-04_节点流程.md], [doc:sd-havana-stone-floor], [doc:sd-tilefloor-broken-inlay], [doc:sd-cobblestone-01-breakdown]
 ```
-图案形状（Tile Generator 网格 / Splatter Circular 环 / 旋转 45° 菱形）-> Multi Switch(Pattern)
- -> 逐块数据（Flood Fill -> Random Color -> Distance -> R 通道 = #408）
- -> 砖体（Bevel -> Slope Blur 啃边 -> 逐块高差 / 倾斜 / 逐块噪声 / 裂纹 / 破损 / 崩边）
- -> 勾缝（从砖形状反推）-> Height Blend(position 0.4) -> H_final
+pattern shapes (Tile Generator grid / Splatter Circular rings / 45° rotated diamonds) -> Multi Switch(Pattern)
+ -> per-cell data (Flood Fill -> Random Color -> Distance -> R channel = #408)
+ -> tile body (Bevel -> Slope Blur edge nibbling -> per-cell height / tilt / per-cell noise / cracks / damage / chipping)
+ -> grout (derived from the tile shape) -> Height Blend(position 0.4) -> H_final
 ```
-- 逐块噪声：Directional Warp 强度 500–9408，强度图 = #408 -> 每块取到噪声不同位置
-- 参数化选块：Histogram Select 的 position / range 暴露为图参数（裂纹、破损、崩边、灰尘）
-- 一个 Pattern 参数同时切换高度和配色（两个 Multi Switch）
-- 不规则砖轮廓（Havana v8）：在 Tile Generator 的 Bevel 线性距离上加噪声再阈值化；不要 × 原始 Tile Generator（会切回直线）
-- 勾缝高度跟随相邻砖（加权平均，低砖主导）；缝带模糊后要加回颗粒，否则是光滑胶条
-- 石板路（Cobblestone_01）：Tile Random -> Distance 填满 -> Cutting Planes（5 个 FF to Gradient Min）-> Shadows 反相切边 -> 20 多层低强度细节；缝里 Shape Splatter 撒碎石 / 树枝，Atlas Scatter 撒苔藓落叶
-- 破损镶嵌（TileFloor）：苔藓是贴着缝底的薄层（Max，不要 AddSub），边缘用 Blur ramp + 噪声 AddSub + 窄阈值打碎
-- 对外参数参考 Havana：Tile_Tilt 0.06、Tile_Height_Variation 0.03、Mud_Overflow、Polish_Amount、Crack_Amount、Edge_Damage、Dirt_Amount
+- Per-cell noise: Directional Warp intensity 500–9408 with #408 as the intensity map -> each tile samples a different part of the noise
+- Parametric tile selection: expose Histogram Select position / range as graph parameters (cracks, damage, chipping, dust)
+- One Pattern parameter switches height and colors together (two Multi Switch nodes)
+- Irregular tile outline (Havana v8): add noise to the Bevel linear distance of the Tile Generator, then threshold; do not multiply by the original Tile Generator (it cuts back to straight lines)
+- Grout height follows neighbouring tiles (weighted average, lower tiles dominate); add grain back after blurring the grout band, otherwise it is a smooth rubber strip
+- Cobblestone (Cobblestone_01): Tile Random -> Distance fill -> Cutting Planes (5 FF to Gradient with Min) -> inverted Shadows for cut edges -> 20+ low-strength detail layers; Shape Splatter for gravel / twigs in the gaps, Atlas Scatter for moss and leaves
+- Broken inlay (TileFloor): moss is a thin layer on the crack floor (Max, not AddSub); break its edge with a blurred ramp + noise AddSub + narrow threshold
+- Exposed parameters, after Havana: Tile_Tilt 0.06, Tile_Height_Variation 0.03, Mud_Overflow, Polish_Amount, Crack_Amount, Edge_Damage, Dirt_Amount
 
-## 8 森林地面 / 植被 / 苔藓 / 水洼
-参考：[md:JRO_Nature/JRO_ForestMirror/mirror_节点流程.md]、[doc:sd-forest-puddle-ground]、[doc:sd-grass-ground-a]
-- 布局：噪声库放最左复用；主图按通道分行（Height / Position / Roughness / Metallic / BaseColor），每加一层在同一列各放一个 Blend，用同一个层遮罩
-- 泥地：BnW Spots 2 三个版本各自 Source = Effect 的 Slope Blur（0.05 / 0.019 / 0.004，充气）
-- 石头层：L1 Cells 石头（无穿插）-> L2–L4 Tile Sampler（7² -> 10² -> 17² -> 33²），mask = 上一层 HBAO -> Blur -> Levels，invert；每块过 shape_cutter；Uniform Additive Blending 或 Auto Levels 后 Add
-- Position Map 延后上色：每层 Flood Fill to Position 累积，最后 Position to Color 一次取色
-- 树枝 / 碎玻璃 / 叶簇：子图生成器 + Tile Sampler；能 Safe Transform 复制就不用新 Tile Sampler
-- 薄叶片：Color Tile Sampler 盖章，法线 / AO / 高度手动构建；法线按区域替换
-- 苔藓：HBAO 反相 + FlowMap Vector Morph 沿流向生长；苔藓遮罩 = Moisture × 石头顶面 + AO 凹处
-- 水：Uniform 灰度控制水位（Height Blend 参数不变），岸边 Distance 渐变 + 浑水色 + 按深度压暗；水面粗糙度 0
-- ForestPuddleGround 数据：BaseColor 中位数约 0.26、AO 中位数约 0.8；调色板可直接从 mirror.sbs 复制 Gradient 关键帧
-- 草地（Grass_Ground_A）：落叶下地面先 Blur HQ 6 抹平；单叶 ID / 细节用克隆的 Tile Sampler（参数含 $randomseed 全复制）
+## 8 Forest floor / foliage / moss / puddles
+References: [md:JRO_Nature/JRO_ForestMirror/mirror_节点流程.md], [doc:sd-forest-puddle-ground], [doc:sd-grass-ground-a]
+- Layout: a noise library on the far left, reused everywhere; one row per channel (Height / Position / Roughness / Metallic / BaseColor); each new layer gets one Blend per row in the same column, all driven by the same layer mask
+- Mud: three versions of BnW Spots 2, each with a Slope Blur where Source = Effect (0.05 / 0.019 / 0.004, inflate)
+- Stone layers: L1 Cells stones (no intersections) -> L2–L4 Tile Sampler (7² -> 10² -> 17² -> 33²), mask = previous layer HBAO -> Blur -> Levels, inverted; each stone goes through shape_cutter; Uniform Additive Blending, or Auto Levels then Add
+- Deferred coloring with a Position Map: accumulate Flood Fill to Position per layer, then one Position to Color at the end
+- Twigs / glass shards / leaf clusters: sub-graph generators + Tile Sampler; if Safe Transform copies are enough, skip the extra Tile Sampler
+- Thin leaves: stamp with a Color Tile Sampler and build normal / AO / height by hand; replace normals per region
+- Moss: inverted HBAO + FlowMap Vector Morph to grow along the flow; moss mask = Moisture × stone tops + AO crevices
+- Water: a Uniform gray sets the water level (Height Blend settings stay fixed); shore Distance gradient + muddy water color + darkening with depth; water roughness 0
+- ForestPuddleGround numbers: BaseColor median ≈ 0.26, AO median ≈ 0.8; palettes can be copied straight from the Gradient keys in mirror.sbs
+- Grass ground (Grass_Ground_A): Blur HQ 6 the ground under leaves first; per-leaf ID / detail through a cloned Tile Sampler (copy every parameter including $randomseed)
 
-## 9 有机 / 血肉
-参考：[doc:sd-bloody-guts-breakdown]
-- 一条高度主干：Perlin 软光叠加 -> Directional Warp -> Slope Blur 自喂（Max，Effect = 自身 Blur HQ）约 15 次出团块
-- Blur HQ -> Slope Blur -> Blur HQ 三明治；叠加主要 Soft Light，挤缝 Multiply，凸起 Screen，凹陷 Subtract（0.03–0.5）
-- 血管：Cells 1 -> Slope Blur Max -> Non-directional Warp -> 主干驱动 Directional Warp -> Invert -> Screen 0.04（双尺度）
-- 颜色：肉色 Gradient + 静脉青蓝 (0.12,0.21,0.26)；血用带 alpha 的 Gradient Map 以曲率作 opacity 只加在低洼
-- Roughness：强法线（60）出曲率双路 Screen -> 0.14 到 0.55 插值；湿血区 Subtract
+## 9 Organic / flesh
+Reference: [doc:sd-bloody-guts-breakdown]
+- One height trunk: Perlin soft-light stacking -> Directional Warp -> self-fed Slope Blur (Max, Effect = own Blur HQ) about 15 times for blobby masses
+- Blur HQ -> Slope Blur -> Blur HQ sandwich; stack mostly with Soft Light, Multiply for creases, Screen for raised detail, Subtract for dents (0.03–0.5)
+- Veins: Cells 1 -> Slope Blur Max -> Non-directional Warp -> Directional Warp driven by the trunk -> Invert -> Screen 0.04 (two scales)
+- Color: flesh Gradient + bluish veins (0.12,0.21,0.26); blood with an alpha Gradient Map using curvature as opacity, only in hollows
+- Roughness: a strong normal (60) gives a two-way curvature Screen -> interpolate 0.14 to 0.55; Subtract for wet blood areas
 
 ---
 
-## 选方案的决策规则
-- 石头稀疏散布在地面上 -> 1A；要真实体积、石叠石、顺坡 -> 1B；石头铺满互相挤压 -> 2
-- 竖直岩壁、块状断裂 -> 5；斜向层叠 -> 6；水平层理台地 -> 4 的 Quantize
-- 规则几何 -> 7（网格 + 遮罩，不用 Tile Sampler）
-- 多种物体混合的地表（泥 + 石 + 植被 + 水）-> 8 的分行布局 + Position Map
-- 拿不准时先做 1–2 个方案的白模小样（1024）给用户对比
+## Decision rules
+- Rocks scattered sparsely on ground -> 1A; real volume, rocks on rocks, following slopes -> 1B; rocks covering everything and pressing together -> 2
+- Vertical cliff with blocky fractures -> 5; diagonal layering -> 6; horizontal terraces -> Quantize from 4
+- Regular geometry -> 7 (grid + masks, no Tile Sampler)
+- Mixed surfaces (mud + stones + foliage + water) -> the row layout + Position Map from 8
+- When unsure, build clay samples (1024) of one or two approaches for the user to compare
