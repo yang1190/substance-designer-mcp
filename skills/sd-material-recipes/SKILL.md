@@ -132,6 +132,7 @@ pattern shapes (Tile Generator grid / Splatter Circular rings / 45° rotated dia
 - Irregular tile outline (Havana v8): add noise to the Bevel linear distance of the Tile Generator, then threshold; do not multiply by the original Tile Generator (it cuts back to straight lines)
 - Grout height follows neighbouring tiles (weighted average, lower tiles dominate); add grain back after blurring the grout band, otherwise it is a smooth rubber strip
 - Cobblestone (Cobblestone_01): Tile Random -> Distance fill -> Cutting Planes (5 FF to Gradient with Min) -> inverted Shadows for cut edges -> 20+ low-strength detail layers; Shape Splatter for gravel / twigs in the gaps, Atlas Scatter for moss and leaves
+- Cracked glaze / crazing on tiles: use the tight contracted-crack chain in sd-node-techniques section 5 (Distance-randomized pieces -> second Slope Blur with inverted blurred cracks as Effect -> per-piece tilt from the final cracks), driven per tile by #408 so only selected tiles crack
 - Broken inlay (TileFloor): moss is a thin layer on the crack floor (Max, not AddSub); break its edge with a blurred ramp + noise AddSub + narrow threshold
 - Exposed parameters, after Havana: Tile_Tilt 0.06, Tile_Height_Variation 0.03, Mud_Overflow, Polish_Amount, Crack_Amount, Edge_Damage, Dirt_Amount
 

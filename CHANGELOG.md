@@ -4,6 +4,15 @@ All notable changes to the Substance Designer MCP Plugin are documented here.
 
 ---
 
+## [1.8.1] — 2026-10-22 — Skills: tight contracted cracks
+
+### Skills (`sd-material-skills` v1.0.1)
+- `sd-node-techniques`: tight / contracted crack chain from Rosen Kazlachev's 80.lv breakdown (2025), prototyped on SD 16.0.5 — Distance(mask = FF to Gradient, source = FF to Random Grayscale) to split cells into random pieces, a second Slope Blur with Invert(Blur HQ(cracks, 0.33)) as Effect for thin contracted edges, per-piece tilt / offset from the final cracks; measured notes (0.02 widens coverage 9% -> 24% at 1024, Blur vs Min mode nearly identical)
+- `sd-material-recipes`: cracked glaze / crazing on tiles points to the new chain
+- `sd-material-workflow`: pitfall — Distance with a source needs a large distance (256) or a following Edge Detect draws ladder artifacts
+
+---
+
 ## [1.8.0] — 2026-10-21 — Claude skills for material work
 
 ### Skills (new, `sd-material-skills` plugin v1.0.0)

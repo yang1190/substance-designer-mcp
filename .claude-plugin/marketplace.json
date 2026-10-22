@@ -12,7 +12,7 @@
       "name": "sd-material-skills",
       "source": "./",
       "description": "SD material workflow, material recipes and node techniques",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "category": "design"
     }
   ]

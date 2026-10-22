@@ -57,6 +57,7 @@ Other
 - Distance (combine off) spreads each cell's value into the gaps, so no black lines appear and warps and sampling stay clean [RockCliff_A, tile-04]
 - Different texture per cell: per-cell random value as the Directional Warp intensity map (intensity 300–9408) -> each cell samples a different part of the noise [tile-04, RiverPebbles, TileFloor]
 - Per-cell direction: Flood Fill -> To Random Color -> Distance as the vector_map of Vector Warp [Cobblestone_01]
+- Split cells into random new pieces: Distance (mask = Flood Fill to Gradient with random angle, source = Flood Fill to Random Grayscale, distance 256) -> each cell is re-cut along a random line into new flat-valued pieces -> Edge Detect = new cracks; do it twice with different seeds and Multiply the edges. Distance must be large enough to fill flat (distance 20 leaves falloff ramps and Edge Detect then draws ladder artifacts) [80.lv Rosen Kazlachev, verified]
 - Random cell selection: Random Grayscale / Voronoi random color + a very narrow Levels or Histogram Select; expose position / range as graph parameters [tile-04, RockCliff_A]
 - Per-rock ID matching the height one to one: silhouettes + a cloned Tile Sampler with the same seed + color random 1 [Desert_Rocky_Ground_01, Grass_Ground_A]
 - Multi-layer IDs: each layer gets its own FF Random Grayscale, layered by which one is on top (H_n - H_n-1 > 0); a single Flood Fill on the merged mask paints touching rocks the same color [Rocky_Ground_A]
@@ -79,6 +80,14 @@ Other
 
 ## 5 Cracks / joints / strata
 - Cracks following the rock: Tile Random -> Histogram Scan -> Distance (fill to flat cells) -> Crystal Warp 0.22 -> Edge Detect -> Blur 0.2 -> Directional Warp 46–72 driven by rock height -> Slope Blur Min with height as Effect -> Dilation to thicken -> Multiply 0.2 / 0.22 [DesertRock, Desert_Rocky_Ground_01]
+- Tight, contracted cracks (ceramic tiles, crazing, sharp cuts) [80.lv Rosen Kazlachev 2025, prototyped in SD 16 at 1024]:
+  1. Main shapes -> Flood Fill (or, cheaper, a tiny-scale Tile Generator with random grayscale -> Distance -> Edge Detect; Flood Fill is expensive)
+  2. Randomize: Distance(mask = FF to Gradient, source = FF to Random Grayscale) twice, blended -> Edge Detect -> crack mask C (white pieces, black lines)
+  3. Classic step: Slope Blur of C with Perlin / Clouds as Effect (optional warp before)
+  4. Contraction: a second Slope Blur on that result, Effect = Invert(Blur HQ(C, 0.33)), intensity 0.02 -> pieces shrink and get a thin sharp top edge. Mode Blur (7) and Min (6) gave nearly the same result. 0.02 is deliberately exaggerated: at 1024 it widened crack coverage from 9% to 24%; use about 0.005–0.01 for hairline cracks
+  5. Per-piece variation from the final cracks: Invert -> Histogram Scan (tighten, otherwise dotted lines let pieces merge) -> Flood Fill -> FF to Gradient (random angle) + FF to Random Grayscale
+  6. Combine: base shapes -> Overlay random grayscale -> Overlay random slopes -> Subtract inverted cracks
+  - Not covered by the method: width variation, branching, chipping, color / roughness; add them with the techniques above (Edge Detect on random values, Slope Blur Min chipping, curvature masks)
 - Fine cracks: Perlin -> Perlin Warp -> Crystal Warp 0.012 (jagged) -> Histogram Select range 0.008 thin lines -> × Perlin segment mask [Beach B]
 - Straight joints: Tile Sampler thin Pyramids in 3 directions × coarse / fine, rotation map from Clouds (0.039) [RockCliff_A]
 - Engrave only real block borders: Edge Detect on per-block random values, not on joint lines (avoids worm-like double lines) [RockCliff_A]

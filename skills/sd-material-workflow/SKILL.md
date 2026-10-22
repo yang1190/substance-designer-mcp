@@ -131,6 +131,7 @@ Value behaviour
 - Tile Sampler rock diameter ≈ 0.48 × scale / grid; cell radius + position_random beyond about 1.1 cells cuts rocks at cell borders
 - Blur / Blur HQ intensity is relative to size (at 2048 Blur 1.0 ≈ 16 px per side); for a fixed pixel width drive it with a $size function; atomic Blur below about 0.1 does nothing
 - Atomic Warp intensity units are large, around 0.06; Directional Warp below 1 is barely visible, per-cell offsets use 300–9000
+- Distance with a source input fills with falloff unless distance is large: 256 gives flat per-cell values, 20 leaves ramps that make a following Edge Detect draw ladder artifacts
 - Distance units are much larger than pixels; Distance 40 at 2048 is 15× slower, 12 is enough
 - Negative Bevel distance goes inward, -0.01 ≈ 10 px at 2048
 - Edge Detect outputs black edges on white: Multiply it with the mask, do not Subtract

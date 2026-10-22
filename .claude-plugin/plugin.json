@@ -1,6 +1,6 @@
 {
   "name": "sd-material-skills",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Substance Designer PBR material skills: production workflow, recipes by material type, node techniques by stage. Designed to be used together with the substance-designer-mcp server.",
   "author": {
     "name": "yang1190",
