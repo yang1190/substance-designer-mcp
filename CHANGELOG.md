@@ -4,6 +4,15 @@ All notable changes to the Substance Designer MCP Plugin are documented here.
 
 ---
 
+## [1.8.2] — 2026-10-22 — Skills: broken stone tiles breakdown
+
+### Skills (`sd-material-skills` v1.0.2)
+- From the ArtStation *Broken Tiles Tutorial VOL 01* graph (463 + 38 nodes, SD 16.0.5):
+  - `sd-node-techniques`: weathered pebble shape, octagon tile + diamond inserts, engraved ornaments on a grid-aligned Tile Sampler, per-tile Non-uniform Directional Warp (intensity + angle), Distance 10000 joint fill, grid-aligned Tile Sampler for per-tile colour sets, per-tile corner roundness, layered Slope Blur Min edge chipping, cracks on selected tiles with tilted fragments, Atlas Scatter element selection with Flood Fill to Grayscale, pebbles only in low areas via Shape Splatter maps
+  - `sd-material-recipes`: worn / broken stone tiles recipe in category 7
+
+---
+
 ## [1.8.1] — 2026-10-22 — Skills: tight contracted cracks
 
 ### Skills (`sd-material-skills` v1.0.1)

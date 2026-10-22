@@ -21,7 +21,7 @@ Where the references live:
 | 4 Desert / sand / bedrock | desert, bedrock, dune, sand ripples | slab shapes + Quantize strata + sand | DesertRock_Tutorial |
 | 5 Fractured cliff | cliff, fractured rock, joints | joint-based blocks + Flood Fill ridges | RockCliff_A |
 | 6 Stratified rock / slate | slate, stratified, shale | single wedge + large-scale fixed-angle Tile Sampler | SlateCliffRock 14 |
-| 7 Tiles / mosaic / brick / cobblestone | tile, mosaic, brick, cobblestone, flagstone | regular grid + per-cell random value + grout Height Blend | tile-04, HavanaStoneFloor, TileFloor, Cobblestone_01 |
+| 7 Tiles / mosaic / brick / cobblestone | tile, mosaic, brick, cobblestone, flagstone, broken stone tiles | regular grid + per-cell random value + grout Height Blend | tile-04, HavanaStoneFloor, TileFloor, Cobblestone_01, Broken_Tiles |
 | 8 Forest floor / foliage / moss / puddles | forest floor, moss, leaves, puddle, grass | one row per channel + layer masks + Position Map | ForestMirror, ForestPuddleGround, Grass_Ground_A |
 | 9 Organic / flesh | guts, flesh, organic | noise + warps + self-fed Slope Blur | BloodyGuts |
 
@@ -119,7 +119,7 @@ References: [doc:sd-slatecliffrock-14-breakdown], [doc:sd-stratified-rock-materi
 - Simple stratified rock: Tile Sampler (Gradation, 3×9, rotation 0.95) + directional motion blur to shorten plate ends
 
 ## 7 Tiles / mosaic / brick / cobblestone
-References: [md:TileSet/tile-04_节点流程.md], [doc:sd-havana-stone-floor], [doc:sd-tilefloor-broken-inlay], [doc:sd-cobblestone-01-breakdown]
+References: [md:TileSet/tile-04_节点流程.md], [doc:sd-havana-stone-floor], [doc:sd-tilefloor-broken-inlay], [doc:sd-cobblestone-01-breakdown], [md:Artstation - Broken Tiles Tutorial - VOL 01/Broken_Tiles_Tutorial/Broken_Tiles_节点流程.md], [doc:sd-broken-tiles-tutorial-breakdown]
 ```
 pattern shapes (Tile Generator grid / Splatter Circular rings / 45° rotated diamonds) -> Multi Switch(Pattern)
  -> per-cell data (Flood Fill -> Random Color -> Distance -> R channel = #408)
@@ -133,6 +133,17 @@ pattern shapes (Tile Generator grid / Splatter Circular rings / 45° rotated dia
 - Grout height follows neighbouring tiles (weighted average, lower tiles dominate); add grain back after blurring the grout band, otherwise it is a smooth rubber strip
 - Cobblestone (Cobblestone_01): Tile Random -> Distance fill -> Cutting Planes (5 FF to Gradient with Min) -> inverted Shadows for cut edges -> 20+ low-strength detail layers; Shape Splatter for gravel / twigs in the gaps, Atlas Scatter for moss and leaves
 - Cracked glaze / crazing on tiles: use the tight contracted-crack chain in sd-node-techniques section 5 (Distance-randomized pieces -> second Slope Blur with inverted blurred cracks as Effect -> per-piece tilt from the final cracks), driven per tile by #408 so only selected tiles crack
+- Worn / broken stone tiles (Broken_Tiles, octagon + diamond inserts, 463 nodes):
+  ```
+  octagon = square × 45° rotated square -> Tile Sampler 4×4 (+ slightly larger sampler inverted, Max = diamond inserts)
+   -> per-tile data: Flood Fill -> Random Grayscale ×2 + Gradient -> Distance 10000 (mask = Histogram Scan Position 1)
+   -> edge damage (per-tile corner roundness + 4 Slope Blur Min passes) - engraved ornaments (aligned Tile Sampler) × surface wear
+   - cracks on selected tiles (+ crack pieces tilted) × per-tile tilt, Copy 0.25 per-tile height
+   -> Height Blend cement (0.55) -> Height Blend pebbles Shape Splatter (0.31) -> Normal 30 / HBAO
+  ```
+  - Per-tile variety everywhere comes from one random map driving Directional / Non-uniform Directional Warp (intensity and angle)
+  - BaseColor: two tile color sets picked per tile by a Tile Sampler with the tile grid's parameters and a noise mask_map; MG Metal Edge Wear lightens chipped edges and cracks; MG Dirt
+  - Atlas_Scattering graph: twigs -> leaves -> tiny leaves as chained Atlas Scatter on top of the material, collected in low areas
 - Broken inlay (TileFloor): moss is a thin layer on the crack floor (Max, not AddSub); break its edge with a blurred ramp + noise AddSub + narrow threshold
 - Exposed parameters, after Havana: Tile_Tilt 0.06, Tile_Height_Variation 0.03, Mud_Overflow, Polish_Amount, Crack_Amount, Edge_Damage, Dirt_Amount
 

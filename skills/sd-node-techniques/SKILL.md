@@ -28,6 +28,9 @@ Other objects
 - Leaf: Paraboloid Min a 45° rotated Pyramid -> flat top -> subtract midrib and V-shaped side veins (Tile Sampler 1×9, mirrored) -> Crystal warp on the edge; clusters with Splatter Circular [Grass_Ground_A, ForestMirror leaf]
 - Moss clump: small leaf -> Tile Sampler radial cluster -> Shape Extrude for volume [RiverPebbles]; simple version Bell + Warp [TileFloor]
 - Grass tuft: Splatter Circular (Thorn ×64 / ×40) -> Directional Warp to bend [Grass_Ground_A]
+- Weathered pebble: Shape Paraboloid - Crystal 1 (0.61) - Cells 1 (0.46) -> Blur -> Auto Levels -> Slope Blur Min 2.4 (blurred Perlin) -> Multi Directional Warp 23 driven by itself (mode Min) -> MDW 6 (BnW Spots) -> × Gradient Linear 0.39 tilt -> Quantize 51 (fine stepped layers) -> Slope Blur Min 0.26 -> × Moisture 0.13 [Broken_Tiles]
+- Octagon tile with diamond inserts: square Shape × the same square rotated 45° and scaled 0.63 (Multiply) -> Tile Sampler 4×4; a second sampler at a slightly larger scale, inverted and Maxed in, turns the gaps into diamond inserts with an even joint [Broken_Tiles]
+- Engraved ornament: Shape + Transformation copies + Swirl + Mirror (+ Splatter Circular rings) -> Warp 0.03 -> Blur HQ 1 -> two Slope Blur Min 0.1 (Perlin, BnW Spots) -> subtract a grunge for wear -> × tile shape; place 4 variants with a Tile Sampler on the tile grid (pattern rotation random) and Subtract ~0.12 [Broken_Tiles]
 
 ## 2 Scattering and stacking
 
@@ -51,11 +54,16 @@ Other
 - Density sets size: dense points give small rocks, isolated points give large rocks (Cells points driven by a texture) [80.lv Tom Jacobs]
 - Cells + DilationErosion360 dilation instead of multi-layer scattering [ConcreteRockField]
 - Atlas Splitter + scan atlases -> Shape Splatter; Atlas Scatter stacks full PBR channels on a background [Cobblestone_01, RiverPebbles]
+- Pick atlas elements for Atlas Scatter: Flood Fill the atlas -> Flood Fill to Grayscale with a grayscale_input of stretched Shapes covering only the wanted rows -> opacity input; chain layers (twigs -> leaves -> tiny leaves) through background_*; shape_scale_map and mask_random_map from the inverted height so debris collects low; negative mask_from_background_slope keeps tiny leaves on flat ground [Broken_Tiles Atlas_Scattering]
+- Pebbles only in low areas: Shape Splatter height_offset_map, height_scale_map and mask_random_map all fed by a Histogram Scan of the inverted final height; connect background_height too, otherwise height_conform does nothing [Broken_Tiles]
 
 ## 3 Per-cell data (the Flood Fill family)
 - One Flood Fill, reused everywhere: To Random Grayscale (select cells, vary roughness), To Gradient (tilt / cutting planes), To Random Color (vector map), To BBox Size (big rocks tall, small rocks low), Flood Fill Mapper (per-cell texturing), To Position + Position to Color (deferred coloring)
 - Distance (combine off) spreads each cell's value into the gaps, so no black lines appear and warps and sampling stay clean [RockCliff_A, tile-04]
 - Different texture per cell: per-cell random value as the Directional Warp intensity map (intensity 300–9408) -> each cell samples a different part of the noise [tile-04, RiverPebbles, TileFloor]
+- Different direction too: Non-uniform Directional Warp with the per-cell random value on both intensity_input and warp_angle_input (intensity 350–486) -> noise, scratches and cracks are offset and rotated per tile [Broken_Tiles]
+- Fill per-tile values into the joints in one step: Distance 10000 with mask = Histogram Scan (Position 1) of the per-tile map, source = the value to spread [Broken_Tiles]
+- Grid-aligned extras: a Tile Sampler with the same grid / scale as the tile pattern places per-tile ornaments, or picks tiles for a second color set through its mask_map (noise Histogram Scan, mask_invert) [Broken_Tiles]
 - Per-cell direction: Flood Fill -> To Random Color -> Distance as the vector_map of Vector Warp [Cobblestone_01]
 - Split cells into random new pieces: Distance (mask = Flood Fill to Gradient with random angle, source = Flood Fill to Random Grayscale, distance 256) -> each cell is re-cut along a random line into new flat-valued pieces -> Edge Detect = new cracks; do it twice with different seeds and Multiply the edges. Distance must be large enough to fill flat (distance 20 leaves falloff ramps and Edge Detect then draws ladder artifacts) [80.lv Rosen Kazlachev, verified]
 - Random cell selection: Random Grayscale / Voronoi random color + a very narrow Levels or Histogram Select; expose position / range as graph parameters [tile-04, RockCliff_A]
@@ -74,6 +82,8 @@ Other
 - Warps: drive MDW with 64 px low-resolution noise to warp the outline only without fuzz; scale Warp down with size (large rock 0.35 -> gravel 0.025) [Rocky_Ground_A]
 - Split edges / edge notches: Flood Fill the silhouette -> 2 random-direction FF to Gradient, binarize and multiply; silhouette edge band × Crystal Histogram Scan bites notches [Rocky_Ground_A v2]
 - Shadows -> Invert -> Subtract = edges chipped as if cut by side light [Cobblestone_01]
+- Per-tile corner roundness: two Edge Detects of the per-tile random map (roundness 0.8 / 1.6) blended with a per-tile Histogram Scan as opacity [Broken_Tiles]
+- Layered edge chipping: Bevel 0.03 -> Slope Blur Min 0.3 / 0.5 / 0.75 / 1.15 in sequence, each Effect a noise Directional-Warped (200–350) by the per-tile random value, mixed back with Multiply at decreasing opacity (1 -> 0.2 -> 0.08 -> 0.06) [Broken_Tiles]
 - Center bulge with MVCenter; bevel with Bevel; round with Edge Detect roundness [ConcreteRockField etc.]
 - Outline anti-aliasing: Blur HQ intensity = K / $size.x, replaced only inside the |H - blur(H)| edge mask [StoneGroundA]
 - Floor fill: Blur 18 -> Levels + gravel -> Max with the original (prevents black spots in the 3D view); always put gravel on the floor [RockCliff_A]
@@ -88,6 +98,7 @@ Other
   5. Per-piece variation from the final cracks: Invert -> Histogram Scan (tighten, otherwise dotted lines let pieces merge) -> Flood Fill -> FF to Gradient (random angle) + FF to Random Grayscale
   6. Combine: base shapes -> Overlay random grayscale -> Overlay random slopes -> Subtract inverted cracks
   - Not covered by the method: width variation, branching, chipping, color / roughness; add them with the techniques above (Edge Detect on random values, Slope Blur Min chipping, curvature masks)
+- Cracks on selected tiles only: crack lines (random Tile Generator -> Distance 10000 -> inverted Edge Detect -> MDW 3.5 -> Slope Blur Max 1.8 -> Directional Warps) -> per-tile Non-uniform Directional Warp 450 -> × Clouds Histogram Scan × per-tile random threshold -> Subtract 0.35; the pieces cut by the cracks: Histogram Scan -> invert -> Flood Fill -> FF to Gradient -> Distance -> Multiply 0.5 so each fragment tilts differently [Broken_Tiles]
 - Fine cracks: Perlin -> Perlin Warp -> Crystal Warp 0.012 (jagged) -> Histogram Select range 0.008 thin lines -> × Perlin segment mask [Beach B]
 - Straight joints: Tile Sampler thin Pyramids in 3 directions × coarse / fine, rotation map from Clouds (0.039) [RockCliff_A]
 - Engrave only real block borders: Edge Detect on per-block random values, not on joint lines (avoids worm-like double lines) [RockCliff_A]
